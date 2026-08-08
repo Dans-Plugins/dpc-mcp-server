@@ -1,0 +1,50 @@
+name: Build
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [ '18', '20', '22' ]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+
+      - name: Install dev dependencies
+        run: npm install
+
+      - name: Test
+        run: npm test
+
+      # The server must start with no dev dependencies present, because that is
+      # how a user runs it.
+      - name: Start with no dependencies installed
+        run: |
+          rm -rf node_modules
+          printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"ci","version":"0"}}}' \
+            | node src/server.js > /tmp/out.json
+          grep -q '"serverInfo"' /tmp/out.json
+          echo "starts clean"
+
+  freshness:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # Advisory: the vendored snapshot drifting behind the published collection
+      # is expected between syncs and must not block an unrelated change.
+      - name: Is the vendored collection current?
+        continue-on-error: true
+        run: node tools/sync.js --check

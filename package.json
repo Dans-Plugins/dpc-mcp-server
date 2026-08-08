@@ -1,0 +1,19 @@
+{
+  "name": "dpc-mcp-server",
+  "version": "0.1.0",
+  "description": "An MCP server for the DPC Zettelkasten — query the Dan's Plugins Community knowledge graph and read the commit-pinned citations behind every claim.",
+  "license": "MIT",
+  "type": "commonjs",
+  "main": "src/server.js",
+  "bin": { "dpc-mcp-server": "src/server.js" },
+  "engines": { "node": ">=18" },
+  "files": ["src", "vendor", "tools", "README.md", "LICENSE"],
+  "scripts": {
+    "start": "node src/server.js",
+    "sync": "node tools/sync.js",
+    "test": "node test/run.js"
+  },
+  "repository": { "type": "git", "url": "https://github.com/Dans-Plugins/dpc-mcp-server.git" },
+  "keywords": ["mcp", "model-context-protocol", "zettelkasten", "dans-plugins", "graphql"],
+  "devDependencies": { "@modelcontextprotocol/sdk": "^1.30.0" }
+}
