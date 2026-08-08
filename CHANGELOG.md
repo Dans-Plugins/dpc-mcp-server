@@ -23,5 +23,5 @@ Initial release.
   the startup line and by `list_maps`. Syncing resolves a branch to a SHA and
   fetches at that SHA, because `raw.githubusercontent.com` caches branch paths
   and will otherwise hand back a copy that is silently a commit behind.
-- 51 tests across the vendored data, the raw wire protocol, and a live session
+- 55 tests across the vendored data, the raw wire protocol, and a live session
   with `@modelcontextprotocol/sdk`.

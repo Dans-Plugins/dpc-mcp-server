@@ -131,7 +131,7 @@ The server implements MCP's stdio transport — JSON-RPC 2.0, one message per
 line — directly, in about 180 lines. The official SDK is a **dev** dependency,
 used by the test suite to drive this server as a real client would.
 
-That is the claim worth testing, so the tests make it: 52 assertions across the
+That is the claim worth testing, so the tests make it: 55 assertions across the
 vendored data, the raw wire protocol, and a live session with
 `@modelcontextprotocol/sdk`.
 

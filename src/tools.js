@@ -16,6 +16,21 @@
 
 const { text, invalid } = require("./protocol.js");
 
+/**
+ * Dropped from queries before scoring. A natural-language question carries a
+ * lot of words that appear in nearly every note ("how much land can a faction
+ * claim" is three content words and four filler ones), and counting them as
+ * matches buries the note that actually answers the question under whichever
+ * note happens to be longest.
+ */
+const STOPWORDS = new Set([
+  "a", "об", "an", "and", "are", "as", "at", "be", "but", "by", "can", "do", "does",
+  "for", "from", "how", "i", "in", "is", "it", "its", "many", "me", "much", "of",
+  "on", "or", "que", "so", "that", "the", "their", "them", "there", "these", "they",
+  "this", "to", "was", "what", "when", "where", "which", "who", "why", "will",
+  "with", "would", "you", "your",
+]);
+
 const CITATION_NOTE =
   "Every claim in this collection is grounded in a file in a Dans-Plugins " +
   "repository, pinned at a commit SHA. When you use a note, cite its sources " +
@@ -37,6 +52,9 @@ function build(engine, source) {
     linkCount: n.links.length,
     backlinkCount: n.backlinks.length,
     sourceCount: n.sources.length,
+    // Included so a near-miss is still useful: the note that answers the
+    // question is often one link away from the note that matched the words.
+    links: n.links,
   });
 
   const full = (n) => ({
@@ -78,20 +96,33 @@ function build(engine, source) {
       handler: (a) => {
         if (typeof a.query !== "string" || !a.query.trim()) throw invalid("query must be a non-empty string");
         const q = a.query.toLowerCase();
-        const terms = q.split(/\s+/).filter(Boolean);
+        const all = q.split(/[^a-z0-9-]+/).filter(Boolean);
+        // Keep the stopwords only if that is all the caller gave us.
+        const content = all.filter((t) => !STOPWORDS.has(t) && t.length > 1);
+        const terms = content.length ? content : all;
+
         let hits = ids
           .map((id) => notes[id])
           .filter((n) => !a.type || n.type === a.type)
           .map((n) => {
-            // Rank by where the match lands: a title hit means the note is
-            // about the topic; a body hit only means it mentions it.
-            let score = 0;
+            // Score each term once, by the strongest place it appears: a title
+            // hit means the note is about the topic, a body hit only that it
+            // mentions it. Then weight by how many distinct terms matched, so a
+            // note covering the whole question beats one matching a single word
+            // loudly.
+            const title = n.title.toLowerCase();
+            const summary = (n.summary || "").toLowerCase();
+            let score = 0, matched = 0;
             for (const t of terms) {
-              if (n.title.toLowerCase().includes(t)) score += 10;
-              if ((n.summary || "").toLowerCase().includes(t)) score += 4;
-              if ((n.tags || []).some((tag) => tag.includes(t))) score += 3;
-              if (n.text.includes(t)) score += 1;
+              let best = 0;
+              if (title.includes(t)) best = 12;
+              else if (summary.includes(t)) best = 5;
+              else if ((n.tags || []).some((tag) => tag.includes(t))) best = 4;
+              else if (n.text.includes(t)) best = 1;
+              if (best) { score += best; matched++; }
             }
+            if (!matched) return { n, score: 0 };
+            score *= Math.pow(matched / terms.length, 1.5);
             return { n, score };
           })
           .filter((r) => r.score > 0)

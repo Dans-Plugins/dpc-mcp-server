@@ -134,6 +134,18 @@ async function clientTests() {
   check("search_notes honours type and limit",
     c.json.results.every((n) => n.type === "moc") && c.json.results.length <= 3);
 
+  // A natural-language question is mostly filler; the ranking has to survive it.
+  c = await call("search_notes", { query: "how much land can a faction claim", limit: 4 });
+  check("stopwords do not drown a natural-language question",
+    c.json.results.some((n) => n.id === "claimed-chunk" || n.id === "demesne-limit"),
+    c.json.results.map((n) => n.id).join(", "));
+  check("results carry links, so a near miss is one hop from the answer",
+    c.json.results.every((n) => Array.isArray(n.links)));
+
+  c = await call("search_notes", { query: "what is a vassal" });
+  check("a definitional question finds the note that defines it",
+    c.json.results[0].id === "vassalage", c.json.results[0].id);
+
   c = await call("get_note", { id: "demesne-limit" });
   check("get_note returns Markdown", c.json && typeof c.json.markdown === "string" && c.json.markdown.length > 200);
   check("get_note returns citations with pinned permalinks",
