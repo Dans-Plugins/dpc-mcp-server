@@ -343,8 +343,6 @@
       return lines.join("\n").trim();
     }
 
-    return { execute, sdl, TYPES };
-
     return { execute, sdl, TYPES, notes: NOTES, meta: META };
   }
 

@@ -14,11 +14,16 @@ Checked in this order; the first that exists wins.
 | `DPC_ZK_PATH` | Path to a `dpc-zettelkasten` checkout. Uses its `site/dataset.json` and `lib/zk-graphql.js`. |
 | *(none)* | `vendor/dataset.json` and `vendor/zk-graphql.js` — the committed snapshot. |
 
-The server reports which source it used on stderr at startup:
+The server reports which source it used, and which commit of the collection it
+is serving, on stderr at startup:
 
 ```
-dpc-mcp-server 0.1.0 ready — 45 notes, 90 citations across 9 repositories (vendored copy)
+dpc-mcp-server 0.1.0 ready — 45 notes, 90 citations across 9 repositories (vendored copy @ 7c9b5f4eaa)
 ```
+
+The same information comes back from the `list_maps` tool under `collection`,
+so a caller can tell whether an answer came from a current snapshot without
+reading the server's log. `vendor/SOURCE.json` records it on disk.
 
 ### Working against a live checkout
 

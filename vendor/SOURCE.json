@@ -1,0 +1,11 @@
+{
+  "repo": "Dans-Plugins/dpc-zettelkasten",
+  "ref": "7c9b5f4eaa61403a168192ae77b9d8d2243c4ba2",
+  "origin": "https://github.com/Dans-Plugins/dpc-zettelkasten",
+  "noteCount": 45,
+  "citationCount": 90,
+  "files": [
+    "site/dataset.json",
+    "lib/zk-graphql.js"
+  ]
+}

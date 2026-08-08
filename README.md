@@ -83,13 +83,25 @@ the server starts with no network and always serves a known snapshot. The cost
 is that it goes stale, which is what `npm run sync` is for.
 
 ```bash
-npm run sync                            # from the published collection
-npm run sync -- --from ../dpc-zettelkasten   # from a local checkout
-npm run sync -- --check                 # exit non-zero if the copy is stale
+npm run sync                                  # latest commit on the collection's main
+npm run sync -- --ref <sha>                   # a specific commit
+npm run sync -- --from ../dpc-zettelkasten    # a local checkout
+npm run sync -- --check                       # is the snapshot behind main?
 ```
 
-A sync that produces a broken snapshot is refused rather than written: the
-script loads the fetched engine, runs a query against the fetched data, and
+Syncing resolves the branch to a **commit SHA** and fetches at that SHA,
+recording it in `vendor/SOURCE.json`. The server then reports which commit it is
+serving, both in its startup line and in `list_maps`, so a stale snapshot is
+visible rather than silent.
+
+That pinning is not decoration. `raw.githubusercontent.com` caches branch paths,
+and an early version of this script fetched `main` and vendored a copy that was
+a commit behind — while `--check` cheerfully reported it current. Paths under a
+commit SHA are immutable and cache correctly. It is the same rule the collection
+applies to its own citations, for the same reason: a branch is not a version.
+
+A sync that produces a broken snapshot is refused rather than written. The
+script loads the fetched engine against the fetched data, runs a query, and
 checks they agree before touching `vendor/`.
 
 Override the source at runtime if you would rather point at a checkout:
@@ -119,7 +131,7 @@ The server implements MCP's stdio transport — JSON-RPC 2.0, one message per
 line — directly, in about 180 lines. The official SDK is a **dev** dependency,
 used by the test suite to drive this server as a real client would.
 
-That is the claim worth testing, so the tests make it: 47 assertions across the
+That is the claim worth testing, so the tests make it: 52 assertions across the
 vendored data, the raw wire protocol, and a live session with
 `@modelcontextprotocol/sdk`.
 

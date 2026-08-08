@@ -53,6 +53,25 @@ function resolveSources() {
   return candidates;
 }
 
+/** Provenance written by tools/sync.js beside a vendored dataset, if present. */
+function readSource(datasetPath) {
+  const file = path.join(path.dirname(datasetPath), "SOURCE.json");
+  if (!fs.existsSync(file)) return null;
+  try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch (e) { return null; }
+}
+
+function createEngineFrom(enginePath, dataset) {
+  const { createEngine } = require(path.resolve(enginePath));
+  const engine = createEngine(dataset);
+  if (!engine || !engine.notes || !engine.meta) {
+    throw new Error(
+      `${enginePath} does not expose notes and meta. It is probably older than ` +
+      "this server expects — run `npm run sync` to refresh it."
+    );
+  }
+  return engine;
+}
+
 function load() {
   const tried = [];
   for (const c of resolveSources()) {
@@ -64,8 +83,8 @@ function load() {
     if (!dataset || !dataset.notes || !dataset.meta) {
       throw new Error(`${c.dataset} is not a zettelkasten dataset (expected "notes" and "meta")`);
     }
-    const { createEngine } = require(path.resolve(c.engine));
-    return { engine: createEngine(dataset), origin: c.why, dataset: c.dataset };
+    const engine = createEngineFrom(c.engine, dataset);
+    return { engine, origin: c.why, dataset: c.dataset, source: readSource(c.dataset) };
   }
   throw new Error(
     "No zettelkasten data found. Tried:\n  " + tried.join("\n  ") +
@@ -85,8 +104,8 @@ function main() {
     process.exit(1);
   }
 
-  const { engine, origin } = loaded;
-  const tools = build(engine);
+  const { engine, origin, source } = loaded;
+  const tools = build(engine, source);
   const notes = engine.notes;
   const meta = engine.meta;
 
@@ -158,9 +177,10 @@ function main() {
   const server = new Server({ name: NAME, version: VERSION }, handlers);
   server.listen(process.stdin, process.stdout);
 
+  const pin = source && source.ref ? ` @ ${source.ref.slice(0, 10)}` : "";
   process.stderr.write(
     `${NAME} ${VERSION} ready — ${meta.noteCount} notes, ${meta.citationCount} citations ` +
-    `across ${meta.repos.length} repositories (${origin})\n`
+    `across ${meta.repos.length} repositories (${origin}${pin})\n`
   );
 
   process.stdin.on("end", () => process.exit(0));

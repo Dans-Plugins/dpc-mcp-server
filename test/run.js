@@ -145,6 +145,9 @@ async function clientTests() {
 
   c = await call("list_maps", {});
   check("list_maps returns the hierarchy", c.json && c.json.maps.length === 7, c.json && String(c.json.maps.length));
+  check("list_maps reports which commit of the collection it served",
+    c.json.collection && /^[0-9a-f]{40}$/.test(c.json.collection.ref || ""),
+    JSON.stringify(c.json.collection));
   check("every concept has a home in list_maps",
     c.json.maps.reduce((n, m) => n + m.concepts.length, 0) === c.json.totals.concepts,
     `${c.json.maps.reduce((n, m) => n + m.concepts.length, 0)} vs ${c.json.totals.concepts}`);
@@ -209,6 +212,17 @@ function dataTests() {
   check("the engine's schema covers every type",
     ["type Query", "type Note", "type Source", "type Tag", "type Repository", "type Stats"]
       .every((t) => engine.sdl().includes(t)));
+  check("the engine exposes notes and meta for the server to build on",
+    engine.notes && engine.meta && Object.keys(engine.notes).length === ids.length);
+
+  // The vendored snapshot must record which commit it came from. Without this
+  // there is no way to tell a current copy from one that is months behind, and
+  // a CDN-cached fetch can silently vendor a stale file.
+  const src = require(path.join(ROOT, "vendor", "SOURCE.json"));
+  check("the snapshot records its origin repository", src.repo === "Dans-Plugins/dpc-zettelkasten", src.repo);
+  check("the snapshot is pinned to a 40-character commit SHA", /^[0-9a-f]{40}$/.test(src.ref || ""), String(src.ref));
+  check("the recorded note count matches the data", src.noteCount === ids.length,
+    `${src.noteCount} vs ${ids.length}`);
 }
 
 /* -------------------------------------------------------------------- */

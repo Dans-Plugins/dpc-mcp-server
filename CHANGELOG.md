@@ -19,5 +19,9 @@ Initial release.
 - `npm run sync` refreshes the vendored graph and engine from the published
   collection or a local checkout, and refuses to write a snapshot whose engine
   and data disagree.
-- 47 tests across the vendored data, the raw wire protocol, and a live session
+- `vendor/SOURCE.json` records the commit the snapshot came from, reported in
+  the startup line and by `list_maps`. Syncing resolves a branch to a SHA and
+  fetches at that SHA, because `raw.githubusercontent.com` caches branch paths
+  and will otherwise hand back a copy that is silently a commit behind.
+- 51 tests across the vendored data, the raw wire protocol, and a live session
   with `@modelcontextprotocol/sdk`.

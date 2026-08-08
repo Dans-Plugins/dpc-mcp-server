@@ -22,7 +22,7 @@ const CITATION_NOTE =
   "rather than presenting the claim as your own knowledge — the permalinks are " +
   "what make the answer checkable.";
 
-function build(engine) {
+function build(engine, source) {
   const notes = engine.notes;
   const meta = engine.meta;
   const ids = Object.keys(notes);
@@ -154,6 +154,12 @@ function build(engine) {
         const order = (meta.mocOrder || []).filter((m) => notes[m]);
         return text({
           root: meta.home,
+          // Which commit of the collection this answer came from, so a caller
+          // can tell a stale snapshot from a current one.
+          collection: source && source.ref
+            ? { repo: source.repo, ref: source.ref,
+                url: `https://github.com/${source.repo}/tree/${source.ref}` }
+            : { note: "Serving an unpinned local checkout." },
           maps: order.map((m) => ({
             id: m,
             title: notes[m].title,
