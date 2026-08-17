@@ -102,6 +102,24 @@ class Server {
     }
   }
 
+  /**
+   * Handle one parsed message or a batch of them, and return what should be
+   * sent back — a response object, an array of them, or null when everything
+   * in the message was a notification. This is the whole transport-facing
+   * surface: stdio frames the result with newlines, HTTP with a status code.
+   */
+  async respond(msg) {
+    if (Array.isArray(msg)) {
+      const out = [];
+      for (const one of msg) {
+        const r = await this.handle(one);
+        if (r) out.push(r);
+      }
+      return out.length ? out : null;
+    }
+    return await this.handle(msg);
+  }
+
   /** Read newline-delimited JSON-RPC from `input`, write replies to `output`. */
   listen(input, output) {
     let buffer = "";
@@ -128,16 +146,7 @@ class Server {
     }
     // A batch is a JSON array of requests; reply with an array of the responses
     // that are not notifications, or nothing if they all were.
-    if (Array.isArray(msg)) {
-      const out = [];
-      for (const one of msg) {
-        const r = await this.handle(one);
-        if (r) out.push(r);
-      }
-      if (out.length) write(output, out);
-      return;
-    }
-    const response = await this.handle(msg);
+    const response = await this.respond(msg);
     if (response) write(output, response);
   }
 }

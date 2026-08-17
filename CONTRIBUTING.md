@@ -41,13 +41,19 @@ the next sync, and a schema maintained in two places drifts.
 ## Where things live
 
 ```
-src/protocol.js   MCP over stdio — JSON-RPC 2.0, one message per line
+src/protocol.js   MCP itself — JSON-RPC 2.0, and the stdio framing around it
+src/http.js       The Streamable HTTP transport over the same protocol
 src/tools.js      The tools and their descriptions
 src/server.js     Loads the collection, wires tools and resources, runs
 tools/sync.js     Refreshes vendor/ from the published collection
 vendor/           The committed snapshot — generated, do not hand-edit
 test/run.js       Data, raw protocol, and live-client tests
 ```
+
+Both transports answer through the same `Server.respond()`. A change to how a
+message is handled belongs in `src/protocol.js` and reaches both; a change to
+how one is framed, buffered, or refused belongs in the transport that frames
+it.
 
 ## Writing a tool
 
@@ -79,12 +85,14 @@ Three layers, all of which must pass:
 - **Data** — the vendored snapshot is well-formed, every concept cites a
   Dans-Plugins repository at a 40-character SHA, every wikilink resolves.
 - **Raw protocol** — malformed JSON, unknown methods, notifications that must
-  not be answered, batches. Things a well-behaved client never does.
-- **Live client** — a real session with `@modelcontextprotocol/sdk`. This
-  server implements the protocol by hand, so this layer is the actual claim.
+  not be answered, batches. Things a well-behaved client never does. Over HTTP
+  that also means bad content types, oversized bodies, and refused origins.
+- **Live client** — a real session with `@modelcontextprotocol/sdk`, on stdio
+  and over HTTP. This server implements the protocol by hand, so this layer is
+  the actual claim.
 
-If you change `src/protocol.js`, the live-client layer is what proves you did
-not break it. Do not skip it.
+If you change `src/protocol.js` or `src/http.js`, the live-client layer is what
+proves you did not break it. Do not skip it.
 
 ## Pull requests
 

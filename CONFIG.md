@@ -1,7 +1,8 @@
 # Configuration
 
-The server takes no command-line arguments and no config file. Everything is
-environment variables, and all of them are optional.
+There is no config file. Everything is environment variables and a handful of
+flags for choosing a transport, and all of them are optional — `node
+src/server.js` with nothing set serves the vendored collection on stdio.
 
 ## Where the collection is loaded from
 
@@ -19,6 +20,13 @@ is serving, on stderr at startup:
 
 ```
 dpc-mcp-server 0.1.0 ready — 45 notes, 90 citations across 9 repositories (vendored copy @ 7c9b5f4eaa)
+```
+
+Under `--http` a second line follows it, naming the address it bound and the
+health endpoint beside it:
+
+```
+dpc-mcp-server listening on http://127.0.0.1:8080/mcp (health: http://127.0.0.1:8080/healthz)
 ```
 
 The same information comes back from the `list_maps` tool under `collection`,
@@ -46,6 +54,43 @@ Remember that the zettelkasten's `site/dataset.json` is a **generated** file —
 run `python3 tools/build.py` there after editing notes, or the server will keep
 serving the last build.
 
+## Which transport it speaks
+
+stdio by default. `--http`, or setting `MCP_HTTP_PORT`, selects Streamable HTTP
+instead: `POST /mcp` for the protocol, `GET /healthz` for a probe. `GET /mcp`
+answers 405, because this server never initiates a message and so has no stream
+to open.
+
+| Flag | Variable | Default | Meaning |
+|---|---|---|---|
+| `--http` | `MCP_HTTP_PORT` (any value) | off | Serve HTTP instead of stdio. |
+| `--port <n>` | `MCP_HTTP_PORT` | `8080` | Port to listen on. `0` asks the OS for a free one. |
+| `--host <addr>` | `MCP_HTTP_HOST` | `127.0.0.1` | Address to bind. |
+| — | `MCP_HTTP_ORIGINS` | *(none)* | Comma-separated `Origin` values to accept, or `*` for any. |
+
+A flag beats the matching variable. `--help` prints the same summary.
+
+The bind address is loopback unless you change it, and that is deliberate: this
+transport has **no authentication of its own**, so putting it on a public
+interface is a decision to be made explicitly rather than a side effect of
+naming a port. Behind the gateway that means `--host 0.0.0.0` inside a
+container, with the proxy in front doing the authenticating.
+
+`MCP_HTTP_ORIGINS` is the DNS-rebinding defence the MCP specification asks for.
+Requests carrying no `Origin` header are allowed — a client reading a config
+file sends none — and requests from a loopback origin are always allowed.
+Anything else has to be named, or it is refused with 403.
+
+It is a gate, not CORS. No `Access-Control-Allow-Origin` is sent and preflight
+`OPTIONS` is answered with 405, so naming an origin here does not make the
+server reachable from a page in a browser — it only stops one that already
+holds a connection from being refused. Browser clients are not supported.
+
+Two more limits worth knowing: a request body over **64 KB** is refused with 413
+rather than buffered, and an `MCP-Protocol-Version` header naming a version this
+server does not speak is refused with 400 rather than answered in a dialect
+neither side agreed to.
+
 ## Nothing is written, nothing is fetched
 
 The graph is read once at startup and held in memory. No request touches the
@@ -56,4 +101,6 @@ the data means `npm run sync` (or rebuilding the checkout) and a restart.
 
 Everything the server says to a human — the startup banner, load failures —
 goes to **stderr**. A single stray line on stdout desynchronises the client, so
-nothing else may write there.
+nothing else may write there. That holds under `--http` as well, where stdout
+carries nothing at all: a server that logs to a different stream depending on
+how it was started is a server whose logs end up in the wrong place.
