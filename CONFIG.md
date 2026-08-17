@@ -66,7 +66,7 @@ to open.
 | `--http` | `MCP_HTTP_PORT` (any value) | off | Serve HTTP instead of stdio. |
 | `--port <n>` | `MCP_HTTP_PORT` | `8080` | Port to listen on. `0` asks the OS for a free one. |
 | `--host <addr>` | `MCP_HTTP_HOST` | `127.0.0.1` | Address to bind. |
-| — | `MCP_HTTP_ORIGINS` | *(none)* | Comma-separated browser origins to accept, or `*` for any. |
+| — | `MCP_HTTP_ORIGINS` | *(none)* | Comma-separated `Origin` values to accept, or `*` for any. |
 
 A flag beats the matching variable. `--help` prints the same summary.
 
@@ -80,6 +80,11 @@ container, with the proxy in front doing the authenticating.
 Requests carrying no `Origin` header are allowed — a client reading a config
 file sends none — and requests from a loopback origin are always allowed.
 Anything else has to be named, or it is refused with 403.
+
+It is a gate, not CORS. No `Access-Control-Allow-Origin` is sent and preflight
+`OPTIONS` is answered with 405, so naming an origin here does not make the
+server reachable from a page in a browser — it only stops one that already
+holds a connection from being refused. Browser clients are not supported.
 
 Two more limits worth knowing: a request body over **64 KB** is refused with 413
 rather than buffered, and an `MCP-Protocol-Version` header naming a version this

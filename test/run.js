@@ -239,6 +239,20 @@ function startHttp(argv, env) {
   });
 }
 
+/** Run the server to completion and report what it said and how it exited. */
+function runServer(argv) {
+  return new Promise((resolve, reject) => {
+    const proc = spawn("node", [SERVER].concat(argv), { stdio: ["ignore", "pipe", "pipe"] });
+    let out = "", err = "";
+    proc.stdout.setEncoding("utf8");
+    proc.stdout.on("data", (c) => (out += c));
+    proc.stderr.setEncoding("utf8");
+    proc.stderr.on("data", (c) => (err += c));
+    proc.on("error", reject);
+    proc.on("close", (code) => resolve({ code, out, err }));
+  });
+}
+
 /** POST one JSON-RPC message the way a client would, and report what came back. */
 async function postJson(url, body, headers) {
   const res = await fetch(url, {
@@ -254,6 +268,20 @@ async function postJson(url, body, headers) {
 
 async function httpTests() {
   process.stdout.write("\nstreamable HTTP\n");
+
+  // The arguments have to be refused before the collection is loaded, or a
+  // typo becomes a server listening somewhere nobody meant it to.
+  let ran = await runServer(["--help"]);
+  check("--help describes both transports on stderr",
+    ran.code === 0 && /--http/.test(ran.err) && ran.out === "", `exit ${ran.code}`);
+
+  ran = await runServer(["--htp"]);
+  check("an unknown argument is refused rather than ignored",
+    ran.code === 2 && /Unknown argument/.test(ran.err), `exit ${ran.code}: ${ran.err.slice(0, 60)}`);
+
+  ran = await runServer(["--http", "--port", "not-a-port"]);
+  check("a port that is not a number is refused",
+    ran.code === 2 && /port number/.test(ran.err), `exit ${ran.code}: ${ran.err.slice(0, 60)}`);
 
   const server = await startHttp();
   const init = { jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2024-11-05", capabilities: {}, clientInfo: { name: "t", version: "0" } } };

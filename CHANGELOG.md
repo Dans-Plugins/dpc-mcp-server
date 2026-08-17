@@ -16,7 +16,7 @@ All notable changes to this project are documented here.
   loopback, because this transport has no authentication of its own yet.
 - `--help`, describing both transports and the variables that configure them.
 - Tests for the new transport, including a live session driven through the
-  SDK's `StreamableHTTPClientTransport`: 80 assertions in total, up from 55.
+  SDK's `StreamableHTTPClientTransport`: 83 assertions in total, up from 55.
 
 ### Changed
 - `Server.respond()` in `src/protocol.js` now owns batch handling, so both
