@@ -5,8 +5,8 @@
  * dpc-mcp-server — serves the DPC Zettelkasten to MCP clients.
  *
  * Loads the collection, builds the GraphQL engine over it, and speaks MCP on
- * stdio. Nothing is written and nothing is fetched at request time; the graph
- * is read once at startup.
+ * stdio, or over Streamable HTTP with `--http`. Nothing is written and nothing
+ * is fetched at request time; the graph is read once at startup.
  *
  * Where the data comes from, in order:
  *   1. $DPC_ZK_DATASET   — path to a dataset.json
@@ -22,12 +22,65 @@ const path = require("path");
 
 const { Server, text } = require("./protocol.js");
 const { build } = require("./tools.js");
+const httpTransport = require("./http.js");
 
 const ROOT = path.join(__dirname, "..");
 const NAME = "dpc-mcp-server";
 const VERSION = require(path.join(ROOT, "package.json")).version;
 
 const RESOURCE_SCHEME = "dpc-zettelkasten";
+
+const USAGE = `${NAME} ${VERSION}
+
+  node src/server.js                 speak MCP on stdio (the default)
+  node src/server.js --http          speak MCP over Streamable HTTP
+
+Options:
+  --http            serve HTTP instead of stdio; implied by $MCP_HTTP_PORT
+  --port <n>        port to listen on (default ${httpTransport.DEFAULT_PORT}, or $MCP_HTTP_PORT)
+  --host <addr>     address to bind (default ${httpTransport.DEFAULT_HOST}, or $MCP_HTTP_HOST)
+  --help            this text
+
+Environment:
+  DPC_ZK_DATASET, DPC_ZK_ENGINE, DPC_ZK_PATH   where the collection is read from
+  MCP_HTTP_PORT, MCP_HTTP_HOST, MCP_HTTP_ORIGINS   the HTTP transport
+
+See CONFIG.md.
+`;
+
+/**
+ * The HTTP transport is opt-in, and binds loopback unless told otherwise: it
+ * carries no authentication of its own yet, so exposing it takes a deliberate
+ * `--host`, never a side effect of naming a port.
+ */
+function parseArgs(argv) {
+  const opts = {};
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i];
+    const eq = arg.indexOf("=");
+    const name = eq === -1 ? arg : arg.slice(0, eq);
+    const inline = eq === -1 ? null : arg.slice(eq + 1);
+    const value = () => {
+      const v = inline === null ? argv[++i] : inline;
+      if (v === undefined) throw new Error(`${name} needs a value`);
+      return v;
+    };
+    if (name === "--http") opts.http = true;
+    else if (name === "--port") opts.port = port(value());
+    else if (name === "--host") opts.host = value();
+    else if (name === "--help" || name === "-h") opts.help = true;
+    else throw new Error(`Unknown argument: ${arg}. Run with --help.`);
+  }
+  return opts;
+}
+
+function port(value) {
+  const n = Number(value);
+  if (!Number.isInteger(n) || n < 0 || n > 65535) {
+    throw new Error(`"${value}" is not a port number (0-65535; 0 asks the OS for a free one)`);
+  }
+  return n;
+}
 
 function resolveSources() {
   const candidates = [];
@@ -93,7 +146,19 @@ function load() {
   );
 }
 
-function main() {
+async function main(argv) {
+  let args;
+  try {
+    args = parseArgs(argv || process.argv.slice(2));
+  } catch (e) {
+    process.stderr.write(`${NAME}: ${e.message}\n`);
+    process.exit(2);
+  }
+  if (args.help) {
+    process.stderr.write(USAGE);
+    return;
+  }
+
   let loaded;
   try {
     loaded = load();
@@ -175,17 +240,69 @@ function main() {
   };
 
   const server = new Server({ name: NAME, version: VERSION }, handlers);
-  server.listen(process.stdin, process.stdout);
 
   const pin = source && source.ref ? ` @ ${source.ref.slice(0, 10)}` : "";
-  process.stderr.write(
+  const banner =
     `${NAME} ${VERSION} ready — ${meta.noteCount} notes, ${meta.citationCount} citations ` +
-    `across ${meta.repos.length} repositories (${origin}${pin})\n`
-  );
+    `across ${meta.repos.length} repositories (${origin}${pin})`;
 
+  if (args.http || process.env.MCP_HTTP_PORT) {
+    await serveHttp(server, args, { meta, source, banner });
+    return;
+  }
+
+  server.listen(process.stdin, process.stdout);
+  process.stderr.write(`${banner}\n`);
   process.stdin.on("end", () => process.exit(0));
 }
 
-if (require.main === module) main();
+async function serveHttp(server, args, ctx) {
+  const host = args.host || process.env.MCP_HTTP_HOST || httpTransport.DEFAULT_HOST;
+  let wanted;
+  try {
+    wanted = args.port !== undefined ? args.port
+      : process.env.MCP_HTTP_PORT ? port(process.env.MCP_HTTP_PORT)
+      : httpTransport.DEFAULT_PORT;
+  } catch (e) {
+    process.stderr.write(`${NAME}: $MCP_HTTP_PORT ${e.message}\n`);
+    process.exit(2);
+  }
 
-module.exports = { load, main };
+  let listener;
+  try {
+    listener = await httpTransport.listen(server, {
+      host,
+      port: wanted,
+      allowedOrigins: httpTransport.parseOrigins(process.env.MCP_HTTP_ORIGINS),
+      // Unauthenticated, so it says only what a probe needs: that the process
+      // is up, and which commit of the collection it is serving.
+      health: () => ({
+        name: NAME,
+        version: VERSION,
+        notes: ctx.meta.noteCount,
+        collection: ctx.source && ctx.source.ref ? ctx.source.ref : null,
+      }),
+    });
+  } catch (e) {
+    process.stderr.write(`${NAME}: cannot listen on ${host}:${wanted} — ${e.message}\n`);
+    process.exit(1);
+  }
+
+  // stderr here too. stdout is the protocol under the other transport, and a
+  // server that logs to a different stream depending on how it was started is
+  // a server whose logs end up in the wrong place.
+  const bound = listener.address();
+  process.stderr.write(
+    `${ctx.banner}\n${NAME} listening on http://${host}:${bound.port}${httpTransport.MCP_PATH} ` +
+    `(health: http://${host}:${bound.port}${httpTransport.HEALTH_PATH})\n`
+  );
+}
+
+if (require.main === module) {
+  main().catch((e) => {
+    process.stderr.write(`${NAME}: ${e.stack || e.message}\n`);
+    process.exit(1);
+  });
+}
+
+module.exports = { load, main, parseArgs };

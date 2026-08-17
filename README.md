@@ -41,6 +41,25 @@ claude mcp add dpc --  node /absolute/path/to/dpc-mcp-server/src/server.js
 }
 ```
 
+### Over HTTP
+
+The same server also speaks MCP's **Streamable HTTP** transport, for the cases
+where a subprocess is not an option — a container, or a client on another
+machine:
+
+```bash
+node src/server.js --http --port 8080     # POST /mcp, health at /healthz
+```
+
+It binds `127.0.0.1` unless `--host` says otherwise, and it has **no
+authentication of its own**, so it is a local and private-network transport
+until it grows one. stdio remains the default and the right choice for a local
+client.
+
+```bash
+claude mcp add --transport http dpc http://127.0.0.1:8080/mcp
+```
+
 ## Tools
 
 | Tool | For |
@@ -127,12 +146,13 @@ a stale schema writes queries that fail for reasons it cannot see.
 
 ## No dependencies
 
-The server implements MCP's stdio transport — JSON-RPC 2.0, one message per
-line — directly, in about 180 lines. The official SDK is a **dev** dependency,
-used by the test suite to drive this server as a real client would.
+The server implements MCP's transports — JSON-RPC 2.0 over newline-delimited
+stdio, and Streamable HTTP over `node:http` — directly, rather than through the
+SDK. The official SDK is a **dev** dependency, used by the test suite to drive
+this server as a real client would.
 
-That is the claim worth testing, so the tests make it: 55 assertions across the
-vendored data, the raw wire protocol, and a live session with
+That is the claim worth testing, so the tests make it: 80 assertions across the
+vendored data, the raw wire protocol, and live sessions on both transports with
 `@modelcontextprotocol/sdk`.
 
 ```bash

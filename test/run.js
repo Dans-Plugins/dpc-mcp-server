@@ -2,16 +2,17 @@
 "use strict";
 
 /**
- * Two layers of tests.
+ * Two layers of tests, each run against both transports.
  *
  * The raw layer speaks JSON-RPC at the server directly, which is the only way
  * to check things a well-behaved client never does — malformed JSON, unknown
- * methods, notifications that must not be answered.
+ * methods, notifications that must not be answered, oversized bodies.
  *
  * The client layer drives the server with the official @modelcontextprotocol
  * SDK. That is the test that matters: this server implements the protocol by
  * hand, so "works against the real client" is the claim being made, and
- * nothing short of the real client can support it.
+ * nothing short of the real client can support it. The HTTP section repeats
+ * the handshake through StreamableHTTPClientTransport for the same reason.
  */
 
 const { spawn } = require("child_process");
@@ -199,6 +200,178 @@ async function clientTests() {
   await client.close();
 }
 
+/* ----------------------------------------------------- streamable HTTP */
+
+/**
+ * Start the HTTP transport on an OS-assigned port and wait for it to say where
+ * it landed. `--port 0` keeps concurrent runs from fighting over a fixed one.
+ */
+function startHttp(argv, env) {
+  return new Promise((resolve, reject) => {
+    const args = [SERVER].concat(argv || ["--http", "--port", "0"]);
+    const proc = spawn("node", args, {
+      stdio: ["ignore", "pipe", "pipe"],
+      env: Object.assign({}, process.env, env || {}),
+    });
+    let err = "", out = "";
+    const timer = setTimeout(() => {
+      proc.kill();
+      reject(new Error("server never reported a listening address; stderr was: " + err));
+    }, 15000);
+    proc.stdout.setEncoding("utf8");
+    proc.stdout.on("data", (c) => (out += c));
+    proc.stderr.setEncoding("utf8");
+    proc.stderr.on("data", (c) => {
+      err += c;
+      const m = err.match(/listening on (http:\/\/\S+)/);
+      if (!m) return;
+      clearTimeout(timer);
+      resolve({
+        proc,
+        url: m[1],
+        base: new URL(m[1]).origin,
+        stderr: () => err,
+        stdout: () => out,
+        stop: () => proc.kill(),
+      });
+    });
+    proc.on("error", (e) => { clearTimeout(timer); reject(e); });
+  });
+}
+
+/** POST one JSON-RPC message the way a client would, and report what came back. */
+async function postJson(url, body, headers) {
+  const res = await fetch(url, {
+    method: "POST",
+    headers: Object.assign({ "content-type": "application/json" }, headers || {}),
+    body: typeof body === "string" ? body : JSON.stringify(body),
+  });
+  const text = await res.text();
+  let json = null;
+  try { json = JSON.parse(text); } catch (e) { /* empty or non-JSON body */ }
+  return { res, text, json };
+}
+
+async function httpTests() {
+  process.stdout.write("\nstreamable HTTP\n");
+
+  const server = await startHttp();
+  const init = { jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2024-11-05", capabilities: {}, clientInfo: { name: "t", version: "0" } } };
+
+  try {
+    let r = await postJson(server.url, init);
+    check("HTTP POST returns a JSON-RPC response",
+      r.res.status === 200 && r.json.result.serverInfo.name === "dpc-mcp-server", String(r.res.status));
+    check("the reply is application/json",
+      /^application\/json/.test(r.res.headers.get("content-type") || ""), r.res.headers.get("content-type"));
+    check("the negotiated protocol version comes back as a header",
+      r.res.headers.get("mcp-protocol-version") === "2024-11-05", r.res.headers.get("mcp-protocol-version"));
+
+    r = await postJson(server.url, { jsonrpc: "2.0", method: "notifications/initialized" });
+    check("a notification is accepted with 202 and no body",
+      r.res.status === 202 && r.text === "", `${r.res.status} ${r.text.slice(0, 40)}`);
+
+    r = await postJson(server.url, [
+      { jsonrpc: "2.0", id: 7, method: "ping" },
+      { jsonrpc: "2.0", id: 8, method: "ping" },
+    ]);
+    check("batched requests get a batched reply over HTTP",
+      Array.isArray(r.json) && r.json.length === 2, r.text.slice(0, 80));
+
+    r = await postJson(server.url, "{ this is not json");
+    check("malformed JSON is a 400 with a parse error",
+      r.res.status === 400 && r.json.error.code === -32700, `${r.res.status} ${r.text.slice(0, 60)}`);
+
+    r = await postJson(server.url, init, { "content-type": "text/plain" });
+    check("a non-JSON content type is refused with 415", r.res.status === 415, String(r.res.status));
+
+    r = await postJson(server.url, init, { accept: "text/plain" });
+    check("an Accept this server cannot satisfy is refused with 406", r.res.status === 406, String(r.res.status));
+
+    r = await postJson(server.url, init, { "mcp-protocol-version": "1999-01-01" });
+    check("an unsupported MCP-Protocol-Version is refused with 400",
+      r.res.status === 400 && /2024-11-05/.test(r.text), `${r.res.status} ${r.text.slice(0, 80)}`);
+
+    r = await postJson(server.url, init, { "mcp-protocol-version": "2025-06-18" });
+    check("a supported MCP-Protocol-Version is honoured", r.res.status === 200, String(r.res.status));
+
+    const big = { jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "search_notes", arguments: { query: "x".repeat(70 * 1024) } } };
+    r = await postJson(server.url, big);
+    check("an oversized body is refused with 413 rather than buffered",
+      r.res.status === 413, String(r.res.status));
+
+    r = await postJson(server.url, init, { origin: "https://evil.example" });
+    check("an unexpected Origin is refused with 403", r.res.status === 403, String(r.res.status));
+
+    r = await postJson(server.url, init, { origin: "http://localhost:5173" });
+    check("a loopback Origin is allowed", r.res.status === 200, String(r.res.status));
+
+    let res = await fetch(server.url, { method: "GET" });
+    check("GET /mcp is 405, not a hanging stream",
+      res.status === 405 && res.headers.get("allow") === "POST", String(res.status));
+    await res.text();
+
+    res = await fetch(server.base + "/healthz");
+    const health = await res.json();
+    check("the healthcheck answers without authentication",
+      res.status === 200 && health.status === "ok", String(res.status));
+    check("the healthcheck names the commit of the collection it serves",
+      /^[0-9a-f]{40}$/.test(health.collection || ""), String(health.collection));
+
+    res = await fetch(server.base + "/nope");
+    check("an unknown path is 404 with a pointer to /mcp",
+      res.status === 404 && /\/mcp/.test(await res.text()), String(res.status));
+
+    check("the HTTP transport writes nothing to stdout", server.stdout() === "", server.stdout().slice(0, 60));
+
+    // The claim this transport makes is that the official client can drive it,
+    // exactly as the stdio layer claims for stdio.
+    let Client, StreamableHTTPClientTransport;
+    try {
+      ({ Client } = require("@modelcontextprotocol/sdk/client/index.js"));
+      ({ StreamableHTTPClientTransport } = require("@modelcontextprotocol/sdk/client/streamableHttp.js"));
+    } catch (e) {
+      process.stdout.write("  SKIP  @modelcontextprotocol/sdk not installed (run: npm install)\n");
+      return;
+    }
+
+    const client = new Client({ name: "dpc-mcp-server-tests", version: "0.1.0" }, { capabilities: {} });
+    await client.connect(new StreamableHTTPClientTransport(new URL(server.url)));
+
+    const info = client.getServerVersion();
+    check("the SDK client completes the handshake over HTTP", info && info.name === "dpc-mcp-server", JSON.stringify(info));
+
+    const { tools } = await client.listTools();
+    check("tools are discoverable over HTTP", tools.length === 6, String(tools.length));
+
+    const called = await client.callTool({ name: "get_note", arguments: { id: "faction-power" } });
+    const note = JSON.parse(called.content.map((c) => c.text).join(""));
+    check("a tool call round-trips over HTTP", note.id === "faction-power", String(note.id));
+
+    const read = await client.readResource({ uri: "dpc-zettelkasten://note/faction-power" });
+    check("a resource reads over HTTP", read.contents[0].text.startsWith("---\n"));
+
+    await client.close();
+  } finally {
+    server.stop();
+  }
+
+  // The deployed shape: no arguments at all, the transport and its allowlist
+  // chosen by environment, as a container passes them.
+  const configured = await startHttp([], { MCP_HTTP_PORT: "0", MCP_HTTP_ORIGINS: "https://mcp.example" });
+  try {
+    check("$MCP_HTTP_PORT selects the HTTP transport on its own", /listening on http/.test(configured.stderr()));
+
+    let r = await postJson(configured.url, init, { origin: "https://mcp.example" });
+    check("an origin named in $MCP_HTTP_ORIGINS is allowed", r.res.status === 200, String(r.res.status));
+
+    r = await postJson(configured.url, init, { origin: "https://other.example" });
+    check("an origin outside $MCP_HTTP_ORIGINS is still refused", r.res.status === 403, String(r.res.status));
+  } finally {
+    configured.stop();
+  }
+}
+
 /* ------------------------------------------------------------ data layer */
 
 function dataTests() {
@@ -244,6 +417,7 @@ function dataTests() {
   dataTests();
   await rawTests();
   await clientTests();
+  await httpTests();
 
   process.stdout.write(`\n${passed} passed, ${failed} failed\n`);
   if (failed) {

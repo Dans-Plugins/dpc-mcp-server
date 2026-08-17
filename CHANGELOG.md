@@ -2,6 +2,27 @@
 
 All notable changes to this project are documented here.
 
+## [Unreleased]
+
+### Added
+- A **Streamable HTTP** transport beside stdio, selected with `--http` or by
+  setting `MCP_HTTP_PORT`. `POST /mcp` carries a JSON-RPC message or batch and
+  answers with `application/json`; `GET /healthz` answers a probe without
+  authentication; `GET /mcp` answers 405, because this server never initiates a
+  message and so has no stream to open. Implemented over `node:http` — still no
+  runtime dependencies.
+- HTTP configuration: `--port` / `MCP_HTTP_PORT`, `--host` / `MCP_HTTP_HOST`,
+  and `MCP_HTTP_ORIGINS` for the origin allowlist. The bind address defaults to
+  loopback, because this transport has no authentication of its own yet.
+- `--help`, describing both transports and the variables that configure them.
+- Tests for the new transport, including a live session driven through the
+  SDK's `StreamableHTTPClientTransport`: 80 assertions in total, up from 55.
+
+### Changed
+- `Server.respond()` in `src/protocol.js` now owns batch handling, so both
+  transports frame the same answers rather than each deciding what a batch
+  means.
+
 ## [0.1.0] - 2026-08-08
 
 Initial release.
