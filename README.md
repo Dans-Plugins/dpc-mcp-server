@@ -63,12 +63,12 @@ claude mcp add --transport http dpc http://127.0.0.1:8080/mcp
 ### In a container
 
 The `Dockerfile` builds the HTTP transport into an image. There is no
-`npm install` in it and no `node_modules` in the result — copying `src/` and
-`vendor/` is the whole build, which is what having no runtime dependencies buys.
-It runs as the base image's `node` user, binds `0.0.0.0` inside the container
-because nothing outside the network namespace could otherwise reach it, and
-carries a `HEALTHCHECK` that probes `/healthz` with `node` rather than a `curl`
-the slim image does not ship.
+`npm install` in it and no `node_modules` in the result — copying `package.json`,
+`src/`, and `vendor/` is the whole build, which is what having no runtime
+dependencies buys. It runs as the base image's `node` user, binds `0.0.0.0`
+inside the container because nothing outside the network namespace could
+otherwise reach it, and carries a `HEALTHCHECK` that probes `/healthz` with
+`node` rather than assuming a slim image ships `curl`.
 
 ```bash
 docker build -t dpc-mcp-server .

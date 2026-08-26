@@ -42,10 +42,11 @@ EXPOSE 8080
 # and the graph is read once at startup, so it needs no ownership of anything.
 USER node
 
-# curl and wget are not in this base image, and assuming one of them is there is
-# how a healthcheck ends up silently never running. node is the one interpreter
-# the image is guaranteed to have. The port is read back from the environment so
-# that overriding MCP_HTTP_PORT does not leave the probe checking the old one.
+# A slim base image cannot be assumed to ship curl or wget, and assuming one of
+# them is there is how a healthcheck ends up silently never running. node is the
+# one interpreter this image is guaranteed to have. The port is read back from
+# the environment so that overriding MCP_HTTP_PORT does not leave the probe
+# checking the old one.
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
   CMD ["node", "-e", "require('http').get('http://127.0.0.1:' + (process.env.MCP_HTTP_PORT || 8080) + '/healthz', (r) => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"]
 
