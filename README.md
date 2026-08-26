@@ -60,6 +60,34 @@ client.
 claude mcp add --transport http dpc http://127.0.0.1:8080/mcp
 ```
 
+### In a container
+
+The `Dockerfile` builds the HTTP transport into an image. There is no
+`npm install` in it and no `node_modules` in the result — copying `src/` and
+`vendor/` is the whole build, which is what having no runtime dependencies buys.
+It runs as the base image's `node` user, binds `0.0.0.0` inside the container
+because nothing outside the network namespace could otherwise reach it, and
+carries a `HEALTHCHECK` that probes `/healthz` with `node` rather than a `curl`
+the slim image does not ship.
+
+```bash
+docker build -t dpc-mcp-server .
+docker run -d -p 8080:8080 --name dpc dpc-mcp-server
+curl -s http://127.0.0.1:8080/healthz
+```
+
+The image binds a public interface *inside* the container and still has no
+authentication of its own, so publish it behind something that does — the
+gateway, or anything else that terminates auth in front of it.
+
+**A container does not refresh itself.** The image bakes in
+`vendor/dataset.json`, so it serves whatever commit of the collection was
+vendored when the image was built — deliberately, since that is how the server
+already works and it keeps the container from depending on the network at boot.
+Updating the served collection is `npm run sync`, a commit, and a redeploy. The
+pinned commit comes back from `/healthz` and from `list_maps`, so a stale
+deployment is visible rather than silent.
+
 ## Tools
 
 | Tool | For |

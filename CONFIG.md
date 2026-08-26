@@ -76,6 +76,12 @@ interface is a decision to be made explicitly rather than a side effect of
 naming a port. Behind the gateway that means `--host 0.0.0.0` inside a
 container, with the proxy in front doing the authenticating.
 
+The `Dockerfile` is the one place where that decision has already been made:
+the image sets `MCP_HTTP_HOST=0.0.0.0` and `MCP_HTTP_PORT=8080`, because the
+container's network namespace is the boundary being relied on there. Both are
+still environment variables, so `docker run -e MCP_HTTP_PORT=9000` moves the
+port and the image's healthcheck follows it.
+
 `MCP_HTTP_ORIGINS` is the DNS-rebinding defence the MCP specification asks for.
 Requests carrying no `Origin` header are allowed — a client reading a config
 file sends none — and requests from a loopback origin are always allowed.
