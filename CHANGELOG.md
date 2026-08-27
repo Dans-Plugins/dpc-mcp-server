@@ -15,6 +15,12 @@ All notable changes to this project are documented here.
   and `MCP_HTTP_ORIGINS` for the origin allowlist. The bind address defaults to
   loopback, because this transport has no authentication of its own yet.
 - `--help`, describing both transports and the variables that configure them.
+- A `Dockerfile` serving the HTTP transport, for deployment behind the gateway.
+  No `npm install` and no `node_modules` in the image — copying `package.json`,
+  `src/`, and `vendor/` is the whole build — running as the base image's `node`
+  user, with a `HEALTHCHECK` that probes `/healthz` using `node`, the one
+  interpreter a slim image is guaranteed to ship. CI builds the image and drives
+  a session through it, so a broken Dockerfile fails here rather than on the box.
 - Tests for the new transport, including a live session driven through the
   SDK's `StreamableHTTPClientTransport`: 83 assertions in total, up from 55.
 

@@ -35,6 +35,66 @@ jobs:
           grep -q '"serverInfo"' /tmp/out.json
           echo "starts clean"
 
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build the image
+        run: docker build -t dpc-mcp-server:ci .
+
+      # The no-runtime-dependency rule is a property of the image, not only of
+      # the repository. An image carrying node_modules has stopped making the
+      # claim the project exists to make.
+      - name: No node_modules in the image
+        run: |
+          if docker run --rm --entrypoint sh dpc-mcp-server:ci -c 'test -e /app/node_modules'; then
+            echo "node_modules is present in the image" >&2
+            exit 1
+          fi
+          echo "no node_modules"
+
+      - name: Does not run as root
+        run: |
+          who=$(docker run --rm --entrypoint id dpc-mcp-server:ci -un)
+          echo "runs as $who"
+          test "$who" != "root"
+
+      # The healthcheck's cadence is a deployment choice; its command is the
+      # part that breaks, so CI shortens the interval and tests the command.
+      - name: Serve a session over HTTP
+        run: |
+          docker run -d --name mcp -p 8080:8080 \
+            --health-interval=5s --health-start-period=2s \
+            dpc-mcp-server:ci
+          for _ in $(seq 1 24); do
+            status=$(docker inspect --format '{{.State.Health.Status}}' mcp)
+            if [ "$status" = "healthy" ] || [ "$status" = "unhealthy" ]; then break; fi
+            sleep 5
+          done
+          docker inspect --format '{{.State.Health.Status}}' mcp | grep -qx healthy
+
+          curl -sS -X POST http://127.0.0.1:8080/mcp \
+            -H 'content-type: application/json' \
+            -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"ci","version":"0"}}}' \
+            > /tmp/init.json
+          cat /tmp/init.json
+          grep -q '"serverInfo"' /tmp/init.json
+
+          curl -sS -X POST http://127.0.0.1:8080/mcp \
+            -H 'content-type: application/json' \
+            -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"list_maps","arguments":{}}}' \
+            > /tmp/maps.json
+          grep -q '"content"' /tmp/maps.json
+
+          curl -sS http://127.0.0.1:8080/healthz > /tmp/health.json
+          cat /tmp/health.json
+          grep -q '"status":"ok"' /tmp/health.json
+
+      - name: Container logs
+        if: always()
+        run: docker logs mcp || true
+
   freshness:
     runs-on: ubuntu-latest
     steps:

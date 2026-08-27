@@ -1,0 +1,14 @@
+# The Dockerfile names what it copies, so this list is about keeping the build
+# context small and keeping dev dependencies from ever being in reach of a
+# stray COPY.
+node_modules/
+.git/
+.github/
+test/
+tools/
+*.md
+.gitignore
+.dockerignore
+Dockerfile
+npm-debug.log*
+package-lock.json
