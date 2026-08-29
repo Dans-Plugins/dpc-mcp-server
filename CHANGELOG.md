@@ -21,8 +21,14 @@ All notable changes to this project are documented here.
   user, with a `HEALTHCHECK` that probes `/healthz` using `node`, the one
   interpreter a slim image is guaranteed to ship. CI builds the image and drives
   a session through it, so a broken Dockerfile fails here rather than on the box.
+- Graceful shutdown on `SIGTERM` and `SIGINT`, on both transports. The kernel
+  ignores a signal's default disposition for PID 1 and node installs a handler
+  only where a listener exists, so a container previously waited out the whole
+  `docker stop` grace period and then SIGKILLed. The HTTP transport now stops
+  accepting and drains what is in flight, with a two-second deadline so a wedged
+  socket cannot turn a fast stop into a hang.
 - Tests for the new transport, including a live session driven through the
-  SDK's `StreamableHTTPClientTransport`: 83 assertions in total, up from 55.
+  SDK's `StreamableHTTPClientTransport`: 86 assertions in total, up from 55.
 
 ### Changed
 - `Server.respond()` in `src/protocol.js` now owns batch handling, so both
