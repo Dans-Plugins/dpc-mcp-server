@@ -29,6 +29,20 @@ function check(name, cond, detail) {
   else { failed++; failures.push(name + (detail ? ` — ${detail}` : "")); process.stdout.write(`  FAIL ${name}${detail ? " — " + detail : ""}\n`); }
 }
 
+/**
+ * Signal a running server and report how it exited, and how long that took.
+ * The duration is the assertion that matters: a server that ignores the signal
+ * is killed by the harness rather than exiting, which is exactly what `docker
+ * stop` does ten seconds later.
+ */
+function stopWithSignal(proc, signal) {
+  return new Promise((resolve) => {
+    const started = Date.now();
+    proc.on("close", (code, sig) => resolve({ code, signal: sig, ms: Date.now() - started }));
+    proc.kill(signal);
+  });
+}
+
 /* ------------------------------------------------------------ raw layer */
 
 function rawSession(lines) {
@@ -47,6 +61,33 @@ function rawSession(lines) {
     });
     for (const l of lines) proc.stdin.write(typeof l === "string" ? l + "\n" : JSON.stringify(l) + "\n");
     proc.stdin.end();
+  });
+}
+
+/**
+ * Start a stdio session and leave stdin open, so nothing but a signal can end
+ * it. `rawSession` closes stdin, which the server already exits on; this is the
+ * other case, and the one a container produces.
+ */
+function startStdio() {
+  return new Promise((resolve, reject) => {
+    const proc = spawn("node", [SERVER], { stdio: ["pipe", "pipe", "pipe"] });
+    let err = "";
+    const timer = setTimeout(() => {
+      proc.kill();
+      reject(new Error("server never printed its banner; stderr was: " + err));
+    }, 15000);
+    // Nothing arrives on stdout here, but an unread pipe is never seen to end,
+    // and `close` waits for the stdio streams as well as the exit.
+    proc.stdout.resume();
+    proc.stderr.setEncoding("utf8");
+    proc.stderr.on("data", (c) => {
+      err += c;
+      if (!/ready —/.test(err)) return;
+      clearTimeout(timer);
+      resolve(proc);
+    });
+    proc.on("error", (e) => { clearTimeout(timer); reject(e); });
   });
 }
 
@@ -88,6 +129,10 @@ async function rawTests() {
 
   r = await rawSession([init, [{ jsonrpc: "2.0", id: 7, method: "ping" }, { jsonrpc: "2.0", id: 8, method: "ping" }]]);
   check("batched requests get a batched reply", Array.isArray(r.msgs[1]) && r.msgs[1].length === 2, JSON.stringify(r.msgs[1]));
+
+  const stopped = await stopWithSignal(await startStdio(), "SIGTERM");
+  check("SIGTERM ends a stdio session rather than being ignored",
+    stopped.code === 0 && stopped.ms < 5000, `exit ${stopped.code}/${stopped.signal} after ${stopped.ms}ms`);
 }
 
 /* --------------------------------------------------------- client layer */
@@ -398,6 +443,16 @@ async function httpTests() {
   } finally {
     configured.stop();
   }
+
+  // How a container stops this server. Node as PID 1 ignores a signal it has
+  // installed no handler for, so an unhandled SIGTERM costs `docker stop` its
+  // whole ten-second grace period and then a SIGKILL.
+  const stopping = await startHttp();
+  const stopped = await stopWithSignal(stopping.proc, "SIGTERM");
+  check("SIGTERM closes the HTTP transport and exits cleanly",
+    stopped.code === 0 && stopped.ms < 5000, `exit ${stopped.code}/${stopped.signal} after ${stopped.ms}ms`);
+  check("the shutdown is announced on stderr, not stdout",
+    /shutting down/.test(stopping.stderr()) && stopping.stdout() === "", stopping.stdout().slice(0, 60));
 }
 
 /* ------------------------------------------------------------ data layer */

@@ -97,6 +97,20 @@ rather than buffered, and an `MCP-Protocol-Version` header naming a version this
 server does not speak is refused with 400 rather than answered in a dialect
 neither side agreed to.
 
+## Shutting down
+
+`SIGTERM` and `SIGINT` both end the server with exit status 0, on either
+transport. Under `--http` it stops accepting first and lets what is in flight
+finish; a connection that has not finished within **two seconds** is abandoned,
+so a wedged socket cannot turn a stop into a hang. On stdio the client closing
+the pipe still ends the session, as it always did.
+
+Handling the signal is what lets `docker stop` return as soon as the server
+exits. The kernel ignores a signal's default disposition for PID 1, and node
+installs a handler only where a listener exists, so a server that did not do
+this would wait out the full ten-second grace period and then be killed
+mid-response.
+
 ## Nothing is written, nothing is fetched
 
 The graph is read once at startup and held in memory. No request touches the

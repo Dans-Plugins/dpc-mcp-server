@@ -30,6 +30,14 @@ const VERSION = require(path.join(ROOT, "package.json")).version;
 
 const RESOURCE_SCHEME = "dpc-zettelkasten";
 
+/**
+ * How long a shutdown is allowed to take before the process leaves anyway.
+ * Draining what is in flight is the point, but a wedged socket must not turn a
+ * fast stop into a hang: a container's stop grace period is ten seconds, and
+ * this has to finish well inside it.
+ */
+const SHUTDOWN_GRACE_MS = 2000;
+
 const USAGE = `${NAME} ${VERSION}
 
   node src/server.js                 speak MCP on stdio (the default)
@@ -254,6 +262,13 @@ async function main(argv) {
   server.listen(process.stdin, process.stdout);
   process.stderr.write(`${banner}\n`);
   process.stdin.on("end", () => process.exit(0));
+  // There is no socket to stop accepting on, so closing means stop reading;
+  // `consume()` is dispatched without being awaited, so a reply already being
+  // computed gets the turn of the loop it needs to be written.
+  onShutdown((done) => {
+    process.stdin.pause();
+    setImmediate(done);
+  });
 }
 
 async function serveHttp(server, args, ctx) {
@@ -288,6 +303,14 @@ async function serveHttp(server, args, ctx) {
     process.exit(1);
   }
 
+  onShutdown((done) => {
+    listener.close(done);
+    // `close()` waits for every open connection, and a keep-alive one sitting
+    // idle is open indefinitely. The client holding it is not going to send
+    // anything else, so it does not get to hold the shutdown open either.
+    if (typeof listener.closeIdleConnections === "function") listener.closeIdleConnections();
+  });
+
   // stderr here too. stdout is the protocol under the other transport, and a
   // server that logs to a different stream depending on how it was started is
   // a server whose logs end up in the wrong place.
@@ -296,6 +319,35 @@ async function serveHttp(server, args, ctx) {
     `${ctx.banner}\n${NAME} listening on http://${host}:${bound.port}${httpTransport.MCP_PATH} ` +
     `(health: http://${host}:${bound.port}${httpTransport.HEALTH_PATH})\n`
   );
+}
+
+/**
+ * Leave on SIGTERM or SIGINT, giving `close` a moment to finish what is in
+ * flight first.
+ *
+ * This is not optional in a container. The kernel ignores a signal's default
+ * disposition for PID 1, and node installs a handler only where a listener
+ * exists, so without this `docker stop` sends a SIGTERM into a process that
+ * ignores it, waits out the whole grace period, and then SIGKILLs — costing ten
+ * seconds on every redeploy and truncating an in-flight response instead of
+ * finishing it.
+ *
+ * Both transports get it. Being PID 1 is a property of how the process was
+ * started, not of which transport it chose, and stdio's existing exit path
+ * covers only the client closing the pipe.
+ */
+function onShutdown(close) {
+  let stopping = false;
+  const stop = (signal) => {
+    if (stopping) return;
+    stopping = true;
+    process.stderr.write(`${NAME}: ${signal} — shutting down\n`);
+    // Unreferenced, so a shutdown that finishes early is not held open by its
+    // own deadline; it still fires if something in flight refuses to end.
+    setTimeout(() => process.exit(0), SHUTDOWN_GRACE_MS).unref();
+    close(() => process.exit(0));
+  };
+  for (const signal of ["SIGTERM", "SIGINT"]) process.on(signal, () => stop(signal));
 }
 
 if (require.main === module) {

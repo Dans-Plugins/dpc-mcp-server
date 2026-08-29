@@ -74,7 +74,12 @@ otherwise reach it, and carries a `HEALTHCHECK` that probes `/healthz` with
 docker build -t dpc-mcp-server .
 docker run -d -p 8080:8080 --name dpc dpc-mcp-server
 curl -s http://127.0.0.1:8080/healthz
+docker stop dpc
 ```
+
+`docker stop` returns as soon as the server exits, because the server handles
+`SIGTERM`: it stops accepting, finishes what is in flight, and leaves — rather
+than ignoring the signal and being killed ten seconds later.
 
 The image binds a public interface *inside* the container and still has no
 authentication of its own, so publish it behind something that does — the
@@ -179,7 +184,7 @@ stdio, and Streamable HTTP over `node:http` — directly, rather than through th
 SDK. The official SDK is a **dev** dependency, used by the test suite to drive
 this server as a real client would.
 
-That is the claim worth testing, so the tests make it: 83 assertions across the
+That is the claim worth testing, so the tests make it: 86 assertions across the
 vendored data, the raw wire protocol, and live sessions on both transports with
 `@modelcontextprotocol/sdk`.
 
