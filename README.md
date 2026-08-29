@@ -77,9 +77,9 @@ curl -s http://127.0.0.1:8080/healthz
 docker stop dpc
 ```
 
-`docker stop` returns in about a second: the server handles `SIGTERM`, stops
-accepting, and finishes what is in flight rather than being killed ten seconds
-later.
+`docker stop` returns as soon as the server exits, because the server handles
+`SIGTERM`: it stops accepting, finishes what is in flight, and leaves — rather
+than ignoring the signal and being killed ten seconds later.
 
 The image binds a public interface *inside* the container and still has no
 authentication of its own, so publish it behind something that does — the
