@@ -98,6 +98,24 @@ jobs:
           cat /tmp/health.json
           grep -q '"status":"ok"' /tmp/health.json
 
+      # The signal handler is tested at the process level in test/run.js, but
+      # the bug it fixes lives in the container: PID 1 is what makes an
+      # unhandled SIGTERM get ignored, and only `docker stop` exercises that.
+      # Without the handler this waits out the ten-second grace period and the
+      # container is SIGKILLed with exit code 137; with it, the process exits 0
+      # in about a second. The bound leaves room for a slow runner and none for
+      # the grace period.
+      - name: docker stop returns promptly
+        run: |
+          start=$(date +%s)
+          docker stop mcp
+          elapsed=$(( $(date +%s) - start ))
+          echo "docker stop took ${elapsed}s"
+          test "$elapsed" -lt 5
+          code=$(docker inspect --format '{{.State.ExitCode}}' mcp)
+          echo "exit code $code"
+          test "$code" -eq 0
+
       - name: Container logs
         if: always()
         run: docker logs mcp || true
