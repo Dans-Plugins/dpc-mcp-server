@@ -273,8 +273,6 @@ async function main(argv) {
   }
 
   server.listen(process.stdin, process.stdout);
-  process.stderr.write(`${banner}\n${usage.notice}\n`);
-  usage.startup("stdio");
   // A session that ends at once still gets its startup report out, bounded so
   // an unreachable trace server delays the exit by a second at most.
   process.stdin.on("end", () => usage.close().then(() => process.exit(0)));
@@ -285,6 +283,10 @@ async function main(argv) {
     process.stdin.pause();
     setImmediate(done);
   });
+  // The banner is what says the server is up, so it comes after the signal
+  // handlers: a SIGTERM sent the moment it appears must be handled, not fatal.
+  process.stderr.write(`${banner}\n${usage.notice}\n`);
+  usage.startup("stdio");
 }
 
 async function serveHttp(server, args, ctx) {
