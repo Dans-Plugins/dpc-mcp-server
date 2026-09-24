@@ -22,18 +22,20 @@
  */
 
 const path = require("path");
+const { TraceClient } = require("../vendor/trace-client.js");
 
 const DETAILS = "https://github.com/Stephenson-Software/trace#usage-reporting";
 const CONFIG_FILE = path.join(__dirname, "usage-reporting.json");
 /** How long a stopping server waits for reports still in flight. */
 const CLOSE_MS = 1000;
 
-/** Which environment switch turns reporting off, if any. */
+/**
+ * Whether TRACE_USAGE_REPORTING or DO_NOT_TRACK in `env` turns reporting off.
+ * The check is the vendored client's own, so the values it accepts are exactly
+ * those of every other trace client.
+ */
 function environmentOptOut(env) {
-  const trace = String(env.TRACE_USAGE_REPORTING || "").trim().toLowerCase();
-  if (["off", "false", "0", "no"].includes(trace)) return true;
-  const dnt = String(env.DO_NOT_TRACK || "").trim().toLowerCase();
-  return ["1", "true", "yes"].includes(dnt);
+  return TraceClient.environmentOptsOut(env);
 }
 
 /**
@@ -84,8 +86,9 @@ function create(opts) {
   let client = null;
   if (s.enabled) {
     try {
-      const { TraceClient } = require("../vendor/trace-client.js");
-      client = new TraceClient(s.endpoint, s.application, { key: s.key, fetch: o.fetch });
+      // `env` is handed on so the client reads the same environment this
+      // module decided on, not process.env behind a test's stand-in.
+      client = new TraceClient(s.endpoint, s.application, { key: s.key, fetch: o.fetch, env });
     } catch (e) {
       client = null; // a bad endpoint must not stop the server
     }
