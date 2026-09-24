@@ -38,6 +38,14 @@ in the zettelkasten. Schema changes go there and arrive here through
 `npm run sync`. Editing the vendored copy directly will be silently reverted by
 the next sync, and a schema maintained in two places drifts.
 
+The same goes for `vendor/trace-client.ts`, the usage-reporting client from
+[trace-client-js](https://github.com/Stephenson-Software/trace-client-js), and
+`vendor/trace-client.js`, which `npm run sync:trace-client` derives from it
+(type annotations stripped by Node's own `module.stripTypeScriptTypes`, exports
+rewritten to CommonJS — no build step, no dependency). Changes go upstream; the
+tests fail if the two files stop agreeing. Deriving needs Node 22.13 or later;
+running the result does not.
+
 ## Where things live
 
 ```
@@ -45,7 +53,10 @@ src/protocol.js   MCP itself — JSON-RPC 2.0, and the stdio framing around it
 src/http.js       The Streamable HTTP transport over the same protocol
 src/tools.js      The tools and their descriptions
 src/server.js     Loads the collection, wires tools and resources, runs
+src/usage.js      Usage reporting: the opt-outs, the notice, the events
+src/usage-reporting.json   Its defaults, including the program's key
 tools/sync.js     Refreshes vendor/ from the published collection
+tools/vendor-trace-client.js   Refreshes the vendored trace client
 vendor/           The committed snapshot — generated, do not hand-edit
 test/run.js       Data, raw protocol, and live-client tests
 ```
@@ -80,7 +91,10 @@ exercised through the real SDK.
 npm test
 ```
 
-Three layers, all of which must pass:
+Three layers, all of which must pass. The runner sets
+`TRACE_USAGE_REPORTING=off` for every server it starts, so a test run never
+reports to the real trace server; the usage-reporting tests point theirs at a
+stub on loopback instead.
 
 - **Data** — the vendored snapshot is well-formed, every concept cites a
   Dans-Plugins repository at a 40-character SHA, every wikilink resolves.

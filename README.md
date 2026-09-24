@@ -184,14 +184,33 @@ stdio, and Streamable HTTP over `node:http` — directly, rather than through th
 SDK. The official SDK is a **dev** dependency, used by the test suite to drive
 this server as a real client would.
 
-That is the claim worth testing, so the tests make it: 86 assertions across the
-vendored data, the raw wire protocol, and live sessions on both transports with
-`@modelcontextprotocol/sdk`.
+That is the claim worth testing, so the tests make it: over a hundred
+assertions across the vendored data, the raw wire protocol, usage reporting, and
+live sessions on both transports with `@modelcontextprotocol/sdk`.
 
 ```bash
 npm install   # dev dependencies, for the tests
 npm test
 ```
+
+## Usage reporting
+
+Usage reporting is on by default: the server sends its name, its version, the
+transport it started on (`startup`), and the name of each tool called
+(`tool-call`) to [trace](https://trace.danielstephenson.dev). Tool arguments,
+notes, queries, and anything about the client, the machine, or the person using
+it are never sent — only names from the server's own tool list, so a name a
+client made up is not sent either. The server says which way it is set on
+stderr every time it starts.
+
+To turn it off, any one of these:
+
+- `TRACE_USAGE_REPORTING=off` in the server's environment (the `env` block of
+  your MCP client's config)
+- `DO_NOT_TRACK=1` in the server's environment
+- `"enabled": false` in `src/usage-reporting.json`
+
+Details: https://github.com/Stephenson-Software/trace#usage-reporting
 
 ## Support
 

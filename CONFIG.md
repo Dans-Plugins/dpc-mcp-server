@@ -1,7 +1,8 @@
 # Configuration
 
-There is no config file. Everything is environment variables and a handful of
-flags for choosing a transport, and all of them are optional — `node
+Everything is environment variables and a handful of flags for choosing a
+transport, and all of them are optional — the one file is
+`src/usage-reporting.json`, the usage-reporting defaults (see below) — `node
 src/server.js` with nothing set serves the vendored collection on stdio.
 
 ## Where the collection is loaded from
@@ -111,16 +112,64 @@ installs a handler only where a listener exists, so a server that did not do
 this would wait out the full ten-second grace period and then be killed
 mid-response.
 
-## Nothing is written, nothing is fetched
+## Nothing is written, and the only thing sent is usage
 
-The graph is read once at startup and held in memory. No request touches the
+The graph is read once at startup and held in memory. No request reads the
 network or the filesystem, and the server has no write path at all. Refreshing
 the data means `npm run sync` (or rebuilding the checkout) and a restart.
 
+The one outbound connection is usage reporting: a `startup` event, and a
+`tool-call` event carrying the tool's name, posted to
+https://trace.danielstephenson.dev in the background. A trace server that is
+down or unreachable costs a dropped report and nothing else — never an error, a
+slower answer, or more than a second's delay on exit.
+
+## Usage reporting
+
+On by default. What is sent: the name `dpc-mcp-server`, the version, the
+transport (`stdio` or `http`) with `startup`, and the tool name with each
+`tool-call`. What is never sent: tool arguments, notes, queries, the client's
+name, or anything about the machine or the person using it. A tool name the
+server does not define is not sent.
+
+Off with any one of these, checked in this order; the first that applies is the
+reason the startup notice gives:
+
+| Switch | Reason printed |
+|---|---|
+| `TRACE_USAGE_REPORTING=off` (or `false`, `0`, `no`) | `environment` |
+| `DO_NOT_TRACK=1` (or `true`, `yes`; see https://consoledonottrack.com) | `environment` |
+| `"enabled": false` in `src/usage-reporting.json` | `src/usage-reporting.json` |
+| no `key` in `src/usage-reporting.json` | `no key` |
+
+In an MCP client that means an `env` entry beside the command:
+
+```json
+{
+  "mcpServers": {
+    "dpc": {
+      "command": "node",
+      "args": ["/path/to/dpc-mcp-server/src/server.js"],
+      "env": { "TRACE_USAGE_REPORTING": "off" }
+    }
+  }
+}
+```
+
+`USAGE_REPORTING_ENDPOINT` sends the reports somewhere else instead, such as a
+self-hosted trace or a stub while testing. The key in `src/usage-reporting.json`
+identifies this program to trace; it is not a secret. Details:
+https://github.com/Stephenson-Software/trace#usage-reporting
+
+The client is vendored like the collection is: `vendor/trace-client.ts` is the
+file from [trace-client-js](https://github.com/Stephenson-Software/trace-client-js)
+at the commit in `vendor/TRACE_CLIENT.json`, and `vendor/trace-client.js`, the
+copy the server loads, is derived from it by `npm run sync:trace-client`.
+
 ## stdout is the protocol
 
-Everything the server says to a human — the startup banner, load failures —
-goes to **stderr**. A single stray line on stdout desynchronises the client, so
+Everything the server says to a human — the startup banner, the
+usage-reporting notice, load failures — goes to **stderr**. A single stray line on stdout desynchronises the client, so
 nothing else may write there. That holds under `--http` as well, where stdout
 carries nothing at all: a server that logs to a different stream depending on
 how it was started is a server whose logs end up in the wrong place.

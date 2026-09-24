@@ -1,0 +1,7 @@
+{
+  "_comment": "Usage reporting defaults. The key identifies this program to trace; it is not a secret (https://github.com/Stephenson-Software/trace#usage-reporting). Set enabled to false here, or TRACE_USAGE_REPORTING=off / DO_NOT_TRACK=1 in the environment, to turn reporting off.",
+  "enabled": true,
+  "endpoint": "https://trace.danielstephenson.dev",
+  "application": "dpc-mcp-server",
+  "key": "qOepAC3aKpz-sw3eoSLCSzvsNuAhYkc1uUluLxkbAu8"
+}
