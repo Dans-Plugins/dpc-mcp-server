@@ -561,6 +561,25 @@ async function usageTests() {
   check("no key turns it off", usage.settings(Object.assign({}, cfg, { key: " " }), {}).reason === "no key");
   check("a disabled reporter says why", usage.create({ config: cfg, env: { TRACE_USAGE_REPORTING: "off" } }).notice ===
     "Usage reporting is off (environment).");
+  const { TraceClient } = require(path.join(ROOT, "vendor", "trace-client.js"));
+  const values = [undefined, "", " ", "on", "off", " OFF ", "false", "0", "no", "1", "true", "yes", "maybe"];
+  let agrees = true;
+  for (const trace of values) {
+    for (const dnt of values) {
+      const env = { TRACE_USAGE_REPORTING: trace, DO_NOT_TRACK: dnt };
+      const expected = TraceClient.environmentOptsOut(env) ? "environment" : null;
+      if (usage.settings(cfg, env).reason !== expected) agrees = false;
+    }
+  }
+  check("the environment check is the vendored client's own", agrees);
+  // This process runs with TRACE_USAGE_REPORTING=off (see the top of this
+  // file); a reporter given an empty env must still send, so the client reads
+  // the env it is handed rather than process.env.
+  const sent = [];
+  const handed = usage.create({ config: cfg, env: {}, version: "t",
+    fetch: async (url) => { sent.push(url); return new Response(null, { status: 201 }); } });
+  await handed.startup("stdio");
+  check("the client reads the env it is handed, not process.env", handed.enabled && sent.length === 1, String(sent.length));
 
   const shipped = require(path.join(ROOT, "src", "usage-reporting.json"));
   check("the shipped config reports as dpc-mcp-server", shipped.application === "dpc-mcp-server", shipped.application);

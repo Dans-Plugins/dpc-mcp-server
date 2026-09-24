@@ -39,6 +39,13 @@ All notable changes to this project are documented here.
   SDK's `StreamableHTTPClientTransport`: 86 assertions in total, up from 55.
 
 ### Changed
+- The vendored trace client is trace-client-js 0.2.0 (tag `0.2.0`, commit
+  69b494b), refreshed with `npm run sync:trace-client -- --ref 0.2.0`; it checks
+  `TRACE_USAGE_REPORTING` / `DO_NOT_TRACK` itself and exposes `disabledReason`.
+  `src/usage.js` now uses the client's `TraceClient.environmentOptsOut` for that
+  check instead of its own copy, and hands the client the environment it
+  decided on, so the client never reads `process.env` behind it. The switches,
+  their order and the reasons in the startup notice are unchanged.
 - `Server.respond()` in `src/protocol.js` now owns batch handling, so both
   transports frame the same answers rather than each deciding what a batch
   means.
