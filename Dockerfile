@@ -24,7 +24,8 @@ WORKDIR /app
 
 # package.json is not optional: src/server.js reads the version it reports from
 # it. tools/ and test/ are left out — sync is a maintenance task run in a
-# checkout, and it is the one thing here that touches the network.
+# checkout. src/ carries usage-reporting.json, so the container reports usage
+# like any other install; `-e TRACE_USAGE_REPORTING=off` turns that off.
 COPY package.json LICENSE ./
 COPY src/ ./src/
 COPY vendor/ ./vendor/

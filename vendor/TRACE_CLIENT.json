@@ -1,0 +1,12 @@
+{
+  "repo": "Stephenson-Software/trace-client-js",
+  "ref": "bd1ae15da2cc7ac532ee185b7b3f04ed9d34eca9",
+  "origin": "https://github.com/Stephenson-Software/trace-client-js",
+  "version": "0.1.0",
+  "files": [
+    "trace-client.ts"
+  ],
+  "derived": {
+    "trace-client.js": "tools/vendor-trace-client.js (module.stripTypeScriptTypes, exports rewritten to CommonJS)"
+  }
+}

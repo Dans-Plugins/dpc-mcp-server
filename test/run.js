@@ -21,6 +21,11 @@ const path = require("path");
 const ROOT = path.join(__dirname, "..");
 const SERVER = path.join(ROOT, "src", "server.js");
 
+// Every server these tests start inherits this, so a test run never reports
+// usage to the real trace server. The usage-reporting section below starts its
+// servers with it removed, pointed at a stub on loopback instead.
+process.env.TRACE_USAGE_REPORTING = "off";
+
 let passed = 0, failed = 0;
 const failures = [];
 
@@ -148,7 +153,9 @@ async function clientTests() {
     return;
   }
 
-  const transport = new StdioClientTransport({ command: "node", args: [SERVER] });
+  // The SDK passes a child only a short allowlist of variables unless told
+  // otherwise, which would drop TRACE_USAGE_REPORTING.
+  const transport = new StdioClientTransport({ command: "node", args: [SERVER], env: Object.assign({}, process.env) });
   const client = new Client({ name: "dpc-mcp-server-tests", version: "0.1.0" }, { capabilities: {} });
   await client.connect(transport);
 
@@ -493,6 +500,129 @@ function dataTests() {
     `${src.noteCount} vs ${ids.length}`);
 }
 
+/* ---------------------------------------------------- usage reporting */
+
+/** A loopback stand-in for trace that records what it is sent. */
+function startStub() {
+  const http = require("http");
+  const received = [];
+  const server = http.createServer((req, res) => {
+    let body = "";
+    req.setEncoding("utf8");
+    req.on("data", (c) => (body += c));
+    req.on("end", () => {
+      let json = null;
+      try { json = JSON.parse(body); } catch (e) { /* recorded as null */ }
+      received.push({ method: req.method, url: req.url, auth: req.headers.authorization || "", body, json });
+      res.writeHead(201, { "content-type": "application/json" });
+      res.end("{}");
+    });
+  });
+  return new Promise((resolve) => server.listen(0, "127.0.0.1", () =>
+    resolve({ url: `http://127.0.0.1:${server.address().port}`, received, close: () => server.close() })));
+}
+
+/** A stdio session run with reporting pointed at `endpoint`, and `env` on top. */
+function reportingSession(lines, env) {
+  return new Promise((resolve, reject) => {
+    const childEnv = Object.assign({}, process.env);
+    delete childEnv.TRACE_USAGE_REPORTING;
+    delete childEnv.DO_NOT_TRACK;
+    Object.assign(childEnv, env);
+    const proc = spawn("node", [SERVER], { stdio: ["pipe", "pipe", "pipe"], env: childEnv });
+    let out = "", err = "";
+    proc.stdout.setEncoding("utf8");
+    proc.stdout.on("data", (c) => (out += c));
+    proc.stderr.on("data", (c) => (err += c));
+    proc.on("error", reject);
+    proc.on("close", () => resolve({ out, err }));
+    for (const l of lines) proc.stdin.write(JSON.stringify(l) + "\n");
+    proc.stdin.end();
+  });
+}
+
+async function usageTests() {
+  process.stdout.write("\nusage reporting\n");
+  const usage = require(path.join(ROOT, "src", "usage.js"));
+  const cfg = { enabled: true, endpoint: "https://trace.example", application: "dpc-mcp-server", key: "k" };
+
+  check("on by default with a key", usage.settings(cfg, {}).enabled);
+  for (const v of ["off", "OFF", "false", "0", "no"]) {
+    check(`TRACE_USAGE_REPORTING=${v} turns it off`, usage.settings(cfg, { TRACE_USAGE_REPORTING: v }).reason === "environment");
+  }
+  for (const v of ["1", "true", "YES"]) {
+    check(`DO_NOT_TRACK=${v} turns it off`, usage.settings(cfg, { DO_NOT_TRACK: v }).reason === "environment");
+  }
+  check("DO_NOT_TRACK=0 leaves it on", usage.settings(cfg, { DO_NOT_TRACK: "0" }).enabled);
+  check("the environment wins over the config file",
+    usage.settings(Object.assign({}, cfg, { enabled: false }), { DO_NOT_TRACK: "1" }).reason === "environment");
+  check('"enabled": false in the config file turns it off',
+    usage.settings(Object.assign({}, cfg, { enabled: false }), {}).reason === "src/usage-reporting.json");
+  check("no key turns it off", usage.settings(Object.assign({}, cfg, { key: " " }), {}).reason === "no key");
+  check("a disabled reporter says why", usage.create({ config: cfg, env: { TRACE_USAGE_REPORTING: "off" } }).notice ===
+    "Usage reporting is off (environment).");
+
+  const shipped = require(path.join(ROOT, "src", "usage-reporting.json"));
+  check("the shipped config reports as dpc-mcp-server", shipped.application === "dpc-mcp-server", shipped.application);
+  check("the shipped config is on, with a key, to trace",
+    shipped.enabled === true && typeof shipped.key === "string" && shipped.key.length > 20 &&
+    shipped.endpoint === "https://trace.danielstephenson.dev");
+
+  const src = require(path.join(ROOT, "vendor", "TRACE_CLIENT.json"));
+  check("the vendored client is pinned to a 40-character commit SHA",
+    src.repo === "Stephenson-Software/trace-client-js" && /^[0-9a-f]{40}$/.test(src.ref || ""), String(src.ref));
+  const vendorTool = require(path.join(ROOT, "tools", "vendor-trace-client.js"));
+  if (vendorTool.canDerive()) {
+    const fs = require("fs");
+    const ts = fs.readFileSync(path.join(ROOT, "vendor", "trace-client.ts"), "utf8");
+    const js = fs.readFileSync(path.join(ROOT, "vendor", "trace-client.js"), "utf8");
+    check("vendor/trace-client.js is exactly what vendor/trace-client.ts derives to", vendorTool.derive(ts, src.ref) === js);
+  } else {
+    process.stdout.write(`  SKIP  deriving trace-client.js needs Node 22.13+ (this is ${process.version})\n`);
+  }
+
+  const stub = await startStub();
+  try {
+    const init = { jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2024-11-05", capabilities: {}, clientInfo: { name: "t", version: "0" } } };
+    const marker = "arguments-must-not-leave-" + Date.now();
+    const session = [
+      init,
+      { jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "list_maps", arguments: {} } },
+      { jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "search_notes", arguments: { query: marker } } },
+      { jsonrpc: "2.0", id: 4, method: "tools/call", params: { name: "made-up-" + marker, arguments: {} } },
+    ];
+    const r = await reportingSession(session, { USAGE_REPORTING_ENDPOINT: stub.url });
+    const events = stub.received.map((x) => x.json).filter(Boolean);
+    const startup = events.find((e) => e.name === "startup");
+    const calls = events.filter((e) => e.name === "tool-call");
+    const version = require(path.join(ROOT, "package.json")).version;
+
+    check("the notice is printed on stderr", /Usage reporting is on: dpc-mcp-server sends/.test(r.err) &&
+      r.err.includes(usage.DETAILS) && r.err.includes("TRACE_USAGE_REPORTING=off"));
+    check("stdout stays pure JSON-RPC with reporting on",
+      r.out.split("\n").filter(Boolean).every((l) => { try { JSON.parse(l); return true; } catch (e) { return false; } }));
+    check("every report is a POST to /api/metrics with a bearer key",
+      stub.received.length > 0 && stub.received.every((x) => x.method === "POST" && x.url === "/api/metrics" && /^Bearer \S+$/.test(x.auth)));
+    check("a startup event arrives, tagged with the version and transport",
+      startup && startup.application === "dpc-mcp-server" && startup.tags.version === version && startup.tags.transport === "stdio",
+      JSON.stringify(startup));
+    check("one tool-call event per real tool, tagged with its name",
+      calls.map((e) => e.tags.name).sort().join() === "list_maps,search_notes" &&
+      calls.every((e) => e.application === "dpc-mcp-server" && e.tags.version === version && Object.keys(e.tags).length === 2),
+      JSON.stringify(calls));
+    check("neither arguments nor made-up tool names are sent", stub.received.every((x) => !x.body.includes(marker)));
+
+    stub.received.length = 0;
+    const off = await reportingSession(session, { USAGE_REPORTING_ENDPOINT: stub.url, TRACE_USAGE_REPORTING: "off" });
+    check("TRACE_USAGE_REPORTING=off sends nothing and says so",
+      stub.received.length === 0 && /Usage reporting is off \(environment\)\./.test(off.err), off.err.slice(-120));
+    const dnt = await reportingSession(session, { USAGE_REPORTING_ENDPOINT: stub.url, DO_NOT_TRACK: "1" });
+    check("DO_NOT_TRACK=1 sends nothing", stub.received.length === 0 && /Usage reporting is off \(environment\)\./.test(dnt.err));
+  } finally {
+    stub.close();
+  }
+}
+
 /* -------------------------------------------------------------------- */
 
 (async () => {
@@ -501,6 +631,7 @@ function dataTests() {
   await rawTests();
   await clientTests();
   await httpTests();
+  await usageTests();
 
   process.stdout.write(`\n${passed} passed, ${failed} failed\n`);
   if (failed) {

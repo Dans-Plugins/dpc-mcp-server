@@ -23,6 +23,7 @@ const path = require("path");
 const { Server, text } = require("./protocol.js");
 const { build } = require("./tools.js");
 const httpTransport = require("./http.js");
+const usageReporting = require("./usage.js");
 
 const ROOT = path.join(__dirname, "..");
 const NAME = "dpc-mcp-server";
@@ -38,6 +39,9 @@ const RESOURCE_SCHEME = "dpc-zettelkasten";
  */
 const SHUTDOWN_GRACE_MS = 2000;
 
+/** Replaced in main() once the version is known; a no-op until then. */
+let usage = { close: () => Promise.resolve() };
+
 const USAGE = `${NAME} ${VERSION}
 
   node src/server.js                 speak MCP on stdio (the default)
@@ -52,6 +56,7 @@ Options:
 Environment:
   DPC_ZK_DATASET, DPC_ZK_ENGINE, DPC_ZK_PATH   where the collection is read from
   MCP_HTTP_PORT, MCP_HTTP_HOST, MCP_HTTP_ORIGINS   the HTTP transport
+  TRACE_USAGE_REPORTING=off, DO_NOT_TRACK=1       turn usage reporting off
 
 See CONFIG.md.
 `;
@@ -179,6 +184,8 @@ async function main(argv) {
 
   const { engine, origin, source } = loaded;
   const tools = build(engine, source);
+  const toolNames = new Set(tools.listTools().map((t) => t.name));
+  usage = usageReporting.create({ name: NAME, version: VERSION });
   const notes = engine.notes;
   const meta = engine.meta;
 
@@ -186,7 +193,12 @@ async function main(argv) {
 
   const handlers = {
     listTools: tools.listTools,
-    callTool: tools.callTool,
+    // Only a name the server itself defines is reported, and only the name:
+    // arguments never leave the process.
+    callTool: (name, args) => {
+      if (toolNames.has(name)) usage.toolCall(name);
+      return tools.callTool(name, args);
+    },
 
     // Each note is also a resource, so a client can attach one to a
     // conversation without spending a tool call on it.
@@ -256,12 +268,14 @@ async function main(argv) {
 
   if (args.http || process.env.MCP_HTTP_PORT) {
     await serveHttp(server, args, { meta, source, banner });
+    usage.startup("http");
     return;
   }
 
   server.listen(process.stdin, process.stdout);
-  process.stderr.write(`${banner}\n`);
-  process.stdin.on("end", () => process.exit(0));
+  // A session that ends at once still gets its startup report out, bounded so
+  // an unreachable trace server delays the exit by a second at most.
+  process.stdin.on("end", () => usage.close().then(() => process.exit(0)));
   // There is no socket to stop accepting on, so closing means stop reading;
   // `consume()` is dispatched without being awaited, so a reply already being
   // computed gets the turn of the loop it needs to be written.
@@ -269,6 +283,10 @@ async function main(argv) {
     process.stdin.pause();
     setImmediate(done);
   });
+  // The banner is what says the server is up, so it comes after the signal
+  // handlers: a SIGTERM sent the moment it appears must be handled, not fatal.
+  process.stderr.write(`${banner}\n${usage.notice}\n`);
+  usage.startup("stdio");
 }
 
 async function serveHttp(server, args, ctx) {
@@ -316,7 +334,7 @@ async function serveHttp(server, args, ctx) {
   // a server whose logs end up in the wrong place.
   const bound = listener.address();
   process.stderr.write(
-    `${ctx.banner}\n${NAME} listening on http://${host}:${bound.port}${httpTransport.MCP_PATH} ` +
+    `${ctx.banner}\n${usage.notice}\n${NAME} listening on http://${host}:${bound.port}${httpTransport.MCP_PATH} ` +
     `(health: http://${host}:${bound.port}${httpTransport.HEALTH_PATH})\n`
   );
 }
@@ -345,7 +363,7 @@ function onShutdown(close) {
     // Unreferenced, so a shutdown that finishes early is not held open by its
     // own deadline; it still fires if something in flight refuses to end.
     setTimeout(() => process.exit(0), SHUTDOWN_GRACE_MS).unref();
-    close(() => process.exit(0));
+    close(() => usage.close().then(() => process.exit(0)));
   };
   for (const signal of ["SIGTERM", "SIGINT"]) process.on(signal, () => stop(signal));
 }

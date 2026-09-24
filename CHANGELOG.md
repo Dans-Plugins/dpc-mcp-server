@@ -5,6 +5,14 @@ All notable changes to this project are documented here.
 ## [Unreleased]
 
 ### Added
+- **Usage reporting**, on by default: a `startup` event (tags `version`,
+  `transport`) and one `tool-call` event per call to a tool the server defines
+  (tags `version` and the tool's `name` — never its arguments), sent to
+  https://trace.danielstephenson.dev. The server says so on stderr at every
+  start, never stdout. Off with `TRACE_USAGE_REPORTING=off`, `DO_NOT_TRACK=1`,
+  or `"enabled": false` in `src/usage-reporting.json`. The client is
+  trace-client-js, vendored in `vendor/` at a pinned commit, with the CommonJS
+  copy derived by `npm run sync:trace-client` — still no runtime dependencies.
 - A **Streamable HTTP** transport beside stdio, selected with `--http` or by
   setting `MCP_HTTP_PORT`. `POST /mcp` carries a JSON-RPC message or batch and
   answers with `application/json`; `GET /healthz` answers a probe without
