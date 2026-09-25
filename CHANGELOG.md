@@ -34,7 +34,9 @@ All notable changes to this project are documented here.
   only where a listener exists, so a container previously waited out the whole
   `docker stop` grace period and then SIGKILLed. The HTTP transport now stops
   accepting and drains what is in flight, with a two-second deadline so a wedged
-  socket cannot turn a fast stop into a hang.
+  socket cannot turn a fast stop into a hang. CI runs `docker stop` on the
+  container it built and checks that it returns in under five seconds with exit
+  code 0, so the container path is covered and not only the process one.
 - Tests for the new transport, including a live session driven through the
   SDK's `StreamableHTTPClientTransport`: 86 assertions in total, up from 55.
 
