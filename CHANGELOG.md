@@ -41,7 +41,7 @@ All notable changes to this project are documented here.
   SDK's `StreamableHTTPClientTransport`: 86 assertions in total, up from 55.
 
 ### Changed
-- The vendored trace client is trace-client-js 0.3.0 (commit 67cc4fc), which
+- The vendored trace client is trace-client-js 0.3.0 (commit 76b86c3), which
   takes the program version at construction and tags every event with it.
   `src/usage.js` now passes the server's version to the constructor (falling
   back to `"unknown"` if blank) instead of adding the `version` tag to each
