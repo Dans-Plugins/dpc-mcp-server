@@ -82,19 +82,20 @@ function create(opts) {
   const o = opts || {};
   const env = o.env || process.env;
   const s = settings(o.config !== undefined ? o.config : readConfig(), env);
-  const version = o.version || "unknown";
+  // The client tags every event with it and refuses a blank one, so it is
+  // never blank here.
+  const version = (typeof o.version === "string" && o.version.trim()) || "unknown";
   let client = null;
   if (s.enabled) {
     try {
       // `env` is handed on so the client reads the same environment this
       // module decided on, not process.env behind a test's stand-in.
-      client = new TraceClient(s.endpoint, s.application, { key: s.key, fetch: o.fetch, env });
+      client = new TraceClient(s.endpoint, s.application, { version, key: s.key, fetch: o.fetch, env });
     } catch (e) {
       client = null; // a bad endpoint must not stop the server
     }
   }
-  const report = (name, tags) =>
-    client ? client.report(name, { tags: Object.assign({ version }, tags || {}) }) : Promise.resolve();
+  const report = (name, tags) => (client ? client.report(name, { tags }) : Promise.resolve());
   return {
     enabled: !!client,
     reason: s.reason,

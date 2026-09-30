@@ -580,6 +580,12 @@ async function usageTests() {
     fetch: async (url) => { sent.push(url); return new Response(null, { status: 201 }); } });
   await handed.startup("stdio");
   check("the client reads the env it is handed, not process.env", handed.enabled && sent.length === 1, String(sent.length));
+  const bodies = [];
+  const blank = usage.create({ config: cfg, env: {}, version: " ",
+    fetch: async (url, init) => { bodies.push(JSON.parse(init.body)); return new Response(null, { status: 201 }); } });
+  await blank.toolCall("list_maps");
+  check("a blank version still reports, tagged version=unknown",
+    blank.enabled && bodies.length === 1 && bodies[0].tags.version === "unknown", JSON.stringify(bodies));
 
   const shipped = require(path.join(ROOT, "src", "usage-reporting.json"));
   check("the shipped config reports as dpc-mcp-server", shipped.application === "dpc-mcp-server", shipped.application);

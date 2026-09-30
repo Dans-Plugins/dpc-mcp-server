@@ -96,9 +96,9 @@ function verify(js) {
   try {
     const mod = require(tmp);
     for (const name of EXPORTS) if (!(name in mod)) throw new Error(`${name} is not exported`);
-    const noKey = new mod.TraceClient("http://127.0.0.1:9", "check", {});
+    const noKey = new mod.TraceClient("http://127.0.0.1:9", "check", { version: "0" });
     if (noKey.enabled) throw new Error("a client with no key reports itself enabled");
-    const off = new mod.TraceClient("http://127.0.0.1:9", "check", { key: "k", enabled: false });
+    const off = new mod.TraceClient("http://127.0.0.1:9", "check", { version: "0", key: "k", enabled: false });
     if (off.enabled) throw new Error("enabled: false does not disable the client");
     return mod.TRACE_CLIENT_VERSION;
   } finally {
