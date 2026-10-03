@@ -41,6 +41,15 @@ All notable changes to this project are documented here.
   SDK's `StreamableHTTPClientTransport`: 86 assertions in total, up from 55.
 
 ### Changed
+- The vendored trace client is trace-client-js 0.4.0 (tag `0.4.0`, commit
+  1b4d0fb), refreshed with `npm run sync:trace-client -- --ref <sha>`. Every
+  event now carries a random installation ID as the tag `install`, so trace can
+  count installations rather than events: `TRACE_INSTALL_ID` when set,
+  otherwise a UUID the client keeps in `<user data dir>/dpc-mcp-server/trace-install-id`
+  (`$XDG_DATA_HOME` or `~/.local/share` on Linux, `~/Library/Application Support`
+  on macOS, `%APPDATA%` on Windows). The client reads or creates the file only
+  when reporting is on. On Node before 20.16 / 22.3 the client cannot reach
+  `node:fs`, and the ID lasts for the run only.
 - The vendored trace client is trace-client-js 0.3.0 (commit 67cc4fc), which
   takes the program version at construction and tags every event with it.
   `src/usage.js` now passes the server's version to the constructor (falling

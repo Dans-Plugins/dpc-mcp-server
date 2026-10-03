@@ -10,6 +10,11 @@
  * client or the person using it. Tool names are checked against the server's
  * own list first, so a name a client made up is not sent either.
  *
+ * Every event also carries a random installation ID (tag `install`) so trace
+ * can count installations rather than events: the value of TRACE_INSTALL_ID
+ * when set, otherwise a UUID the client keeps in
+ * <user data dir>/dpc-mcp-server/trace-install-id (see installIdFile below).
+ *
  * On by default, and off with any one of these, checked in this order (the
  * first that applies is the reason given in the startup notice):
  *
@@ -21,6 +26,7 @@
  * and one stray line there desynchronises the client.
  */
 
+const os = require("os");
 const path = require("path");
 const { TraceClient } = require("../vendor/trace-client.js");
 
@@ -60,11 +66,32 @@ function settings(config, env) {
   };
 }
 
+/**
+ * Where the client keeps the installation ID: `<user data dir>/<application>/trace-install-id`,
+ * the user data dir being $XDG_DATA_HOME or ~/.local/share on Linux and the
+ * BSDs, ~/Library/Application Support on macOS, and %APPDATA% on Windows.
+ * Only a path: the client reads or creates the file, and only when reporting
+ * is on, so an opt-out never creates it. Null when no home directory is known.
+ */
+function installIdFile(application, env, platform, home) {
+  const plat = platform || process.platform;
+  let base = "";
+  if (plat === "win32") base = (env.APPDATA || "").trim();
+  else if (plat === "darwin") base = home ? path.join(home, "Library", "Application Support") : "";
+  else base = (env.XDG_DATA_HOME || "").trim() || (home ? path.join(home, ".local", "share") : "");
+  if (!base) return null;
+  return path.join(base, String(application).toLowerCase(), "trace-install-id");
+}
+
+function homeDir() {
+  try { return os.homedir(); } catch (e) { return ""; }
+}
+
 function notice(s, name) {
   if (!s.enabled) return `Usage reporting is off (${s.reason}).`;
   return (
     `Usage reporting is on: ${name} sends its name, version and the names of the tools called ` +
-    `to ${s.endpoint} - never tool arguments, notes, queries or anything about you. ` +
+    `to ${s.endpoint}, with a random installation ID - never tool arguments, notes, queries or anything about you. ` +
     "Turn it off with TRACE_USAGE_REPORTING=off (or DO_NOT_TRACK=1) in the server's environment, " +
     `or "enabled": false in src/usage-reporting.json. Details: ${DETAILS}`
   );
@@ -90,7 +117,18 @@ function create(opts) {
     try {
       // `env` is handed on so the client reads the same environment this
       // module decided on, not process.env behind a test's stand-in.
-      client = new TraceClient(s.endpoint, s.application, { version, key: s.key, fetch: o.fetch, env });
+      // TRACE_INSTALL_ID pins the installation ID (a container, say);
+      // otherwise the client keeps one in installIdFile, which it reads or
+      // creates only because it is enabled. On Node before 20.16 / 22.3 the
+      // client cannot reach node:fs and uses a fresh ID for the run instead.
+      client = new TraceClient(s.endpoint, s.application, {
+        version,
+        key: s.key,
+        fetch: o.fetch,
+        env,
+        installId: env.TRACE_INSTALL_ID,
+        installIdFile: installIdFile(s.application, env, o.platform, o.home !== undefined ? o.home : homeDir()),
+      });
     } catch (e) {
       client = null; // a bad endpoint must not stop the server
     }
@@ -98,6 +136,7 @@ function create(opts) {
   const report = (name, tags) => (client ? client.report(name, { tags }) : Promise.resolve());
   return {
     enabled: !!client,
+    installId: client ? client.installId : null,
     reason: s.reason,
     notice: notice(s, o.name || s.application),
     startup: (transport) => report("startup", { transport }),
@@ -106,4 +145,4 @@ function create(opts) {
   };
 }
 
-module.exports = { create, settings, environmentOptOut, DETAILS };
+module.exports = { create, settings, environmentOptOut, installIdFile, DETAILS };

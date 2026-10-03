@@ -46,7 +46,10 @@ the only documentation the model receives.
 model sees `isError` and can recover. Throw only for malformed calls.
 
 **Nothing is written and nothing is fetched at request time.** The graph is read
-once at startup. The server has no write path; keep it that way.
+once at startup. The server has no write path of its own; keep it that way. The
+one exception is the vendored trace client creating its installation-ID file
+(`<user data dir>/dpc-mcp-server/trace-install-id`) once at startup, and only
+when usage reporting is on.
 
 ## Testing
 

@@ -1,8 +1,8 @@
 {
   "repo": "Stephenson-Software/trace-client-js",
-  "ref": "67cc4fccce2dce08365343c13332e45241e965ca",
+  "ref": "1b4d0fb0c7a85040b73ea42de8abaf66e9b5ffd8",
   "origin": "https://github.com/Stephenson-Software/trace-client-js",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "files": [
     "trace-client.ts"
   ],

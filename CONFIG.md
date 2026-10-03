@@ -112,10 +112,12 @@ installs a handler only where a listener exists, so a server that did not do
 this would wait out the full ten-second grace period and then be killed
 mid-response.
 
-## Nothing is written, and the only thing sent is usage
+## Nothing is written but the installation ID, and the only thing sent is usage
 
 The graph is read once at startup and held in memory. No request reads the
-network or the filesystem, and the server has no write path at all. Refreshing
+network or the filesystem. The one file the server may write is the usage
+reporting installation ID (below), created once at startup and only when
+reporting is on. Refreshing
 the data means `npm run sync` (or rebuilding the checkout) and a restart.
 
 The one outbound connection is usage reporting: a `startup` event, and a
@@ -128,9 +130,24 @@ slower answer, or more than a second's delay on exit.
 
 On by default. What is sent: the name `dpc-mcp-server`, the version, the
 transport (`stdio` or `http`) with `startup`, and the tool name with each
-`tool-call`. What is never sent: tool arguments, notes, queries, the client's
-name, or anything about the machine or the person using it. A tool name the
-server does not define is not sent.
+`tool-call`, and a random installation ID as the tag `install` on every event.
+What is never sent: tool arguments, notes, queries, the client's name, or
+anything about the machine or the person using it. A tool name the server does
+not define is not sent.
+
+The installation ID is a random UUID, so trace can count installations rather
+than events:
+
+| Source | When |
+|---|---|
+| `TRACE_INSTALL_ID` | Set and not blank: sent as is (pin one for a container or a deployment). |
+| `<user data dir>/dpc-mcp-server/trace-install-id` | Otherwise. Created on first run; delete it to reset. The user data dir is `$XDG_DATA_HOME` or `~/.local/share` on Linux and the BSDs, `~/Library/Application Support` on macOS, `%APPDATA%` on Windows. |
+
+The file is reached through `process.getBuiltinModule` (Node 20.16+ or 22.3+); on an
+older Node, or when it cannot be read or written, the ID lasts for that run
+only. In the container the file lands in the container's own filesystem, so a
+recreated container counts as a new installation unless `TRACE_INSTALL_ID` is
+set. With reporting off the file is never read or created.
 
 Off with any one of these, checked in this order; the first that applies is the
 reason the startup notice gives:

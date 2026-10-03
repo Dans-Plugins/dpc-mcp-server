@@ -528,6 +528,9 @@ function reportingSession(lines, env) {
     const childEnv = Object.assign({}, process.env);
     delete childEnv.TRACE_USAGE_REPORTING;
     delete childEnv.DO_NOT_TRACK;
+    delete childEnv.TRACE_INSTALL_ID;
+    // The installation ID file goes to a scratch data dir, never the real one.
+    childEnv.XDG_DATA_HOME = INSTALL_DATA_HOME;
     Object.assign(childEnv, env);
     const proc = spawn("node", [SERVER], { stdio: ["pipe", "pipe", "pipe"], env: childEnv });
     let out = "", err = "";
@@ -540,6 +543,8 @@ function reportingSession(lines, env) {
     proc.stdin.end();
   });
 }
+
+const INSTALL_DATA_HOME = require("fs").mkdtempSync(path.join(require("os").tmpdir(), "dpc-mcp-install-"));
 
 async function usageTests() {
   process.stdout.write("\nusage reporting\n");
@@ -576,16 +581,39 @@ async function usageTests() {
   // file); a reporter given an empty env must still send, so the client reads
   // the env it is handed rather than process.env.
   const sent = [];
-  const handed = usage.create({ config: cfg, env: {}, version: "t",
+  const handed = usage.create({ config: cfg, env: {}, version: "t", home: INSTALL_DATA_HOME,
     fetch: async (url) => { sent.push(url); return new Response(null, { status: 201 }); } });
   await handed.startup("stdio");
   check("the client reads the env it is handed, not process.env", handed.enabled && sent.length === 1, String(sent.length));
   const bodies = [];
-  const blank = usage.create({ config: cfg, env: {}, version: " ",
+  const blank = usage.create({ config: cfg, env: {}, version: " ", home: INSTALL_DATA_HOME,
     fetch: async (url, init) => { bodies.push(JSON.parse(init.body)); return new Response(null, { status: 201 }); } });
   await blank.toolCall("list_maps");
   check("a blank version still reports, tagged version=unknown",
     blank.enabled && bodies.length === 1 && bodies[0].tags.version === "unknown", JSON.stringify(bodies));
+
+  // The installation ID: where it lives, that TRACE_INSTALL_ID pins it, and
+  // that an opt-out never creates the file.
+  const fs = require("fs");
+  check("the ID file is under $XDG_DATA_HOME on Linux",
+    usage.installIdFile("dpc-mcp-server", { XDG_DATA_HOME: "/x" }, "linux", "/h") === path.join("/x", "dpc-mcp-server", "trace-install-id"));
+  check("the ID file falls back to ~/.local/share on Linux",
+    usage.installIdFile("dpc-mcp-server", {}, "linux", "/h") === path.join("/h", ".local", "share", "dpc-mcp-server", "trace-install-id"));
+  check("the ID file is under ~/Library/Application Support on macOS",
+    usage.installIdFile("dpc-mcp-server", {}, "darwin", "/h") === path.join("/h", "Library", "Application Support", "dpc-mcp-server", "trace-install-id"));
+  check("the ID file is under %APPDATA% on Windows",
+    usage.installIdFile("dpc-mcp-server", { APPDATA: "C:\\A" }, "win32", "/h") === path.join("C:\\A", "dpc-mcp-server", "trace-install-id"));
+  check("no home and no data dir means no ID file", usage.installIdFile("dpc-mcp-server", {}, "linux", "") === null);
+  const pinnedBodies = [];
+  const pinned = usage.create({ config: cfg, env: { TRACE_INSTALL_ID: " pinned-id " }, version: "t", home: INSTALL_DATA_HOME,
+    fetch: async (url, init) => { pinnedBodies.push(JSON.parse(init.body)); return new Response(null, { status: 201 }); } });
+  await pinned.startup("stdio");
+  check("TRACE_INSTALL_ID is sent as the install tag", pinned.installId === "pinned-id" &&
+    pinnedBodies.length === 1 && pinnedBodies[0].tags.install === "pinned-id", JSON.stringify(pinnedBodies));
+  const offHome = fs.mkdtempSync(path.join(require("os").tmpdir(), "dpc-mcp-off-"));
+  const offReporter = usage.create({ config: cfg, env: { TRACE_USAGE_REPORTING: "off" }, home: offHome, platform: "linux" });
+  check("an opted-out reporter has no ID and creates no file", offReporter.installId === null &&
+    !fs.existsSync(path.join(offHome, ".local", "share", "dpc-mcp-server", "trace-install-id")));
 
   const shipped = require(path.join(ROOT, "src", "usage-reporting.json"));
   check("the shipped config reports as dpc-mcp-server", shipped.application === "dpc-mcp-server", shipped.application);
@@ -633,16 +661,28 @@ async function usageTests() {
       JSON.stringify(startup));
     check("one tool-call event per real tool, tagged with its name",
       calls.map((e) => e.tags.name).sort().join() === "list_maps,search_notes" &&
-      calls.every((e) => e.application === "dpc-mcp-server" && e.tags.version === version && Object.keys(e.tags).length === 2),
+      calls.every((e) => e.application === "dpc-mcp-server" && e.tags.version === version && Object.keys(e.tags).length === 3),
       JSON.stringify(calls));
     check("neither arguments nor made-up tool names are sent", stub.received.every((x) => !x.body.includes(marker)));
+    const idFile = path.join(INSTALL_DATA_HOME, "dpc-mcp-server", "trace-install-id");
+    if (typeof process.getBuiltinModule === "function") {
+      const stored = fs.existsSync(idFile) ? fs.readFileSync(idFile, "utf8").trim() : "";
+      check("every event carries the install ID kept in <data dir>/dpc-mcp-server/trace-install-id",
+        stored.length > 0 && events.length > 0 && events.every((e) => e.tags.install === stored), stored);
+    } else {
+      const ids = new Set(events.map((e) => e.tags.install));
+      check("every event carries one install ID (in memory: no process.getBuiltinModule before Node 20.16 / 22.3)",
+        events.length > 0 && ids.size === 1 && !ids.has(undefined), JSON.stringify([...ids]));
+    }
 
     stub.received.length = 0;
     const off = await reportingSession(session, { USAGE_REPORTING_ENDPOINT: stub.url, TRACE_USAGE_REPORTING: "off" });
+    fs.rmSync(idFile, { force: true });
     check("TRACE_USAGE_REPORTING=off sends nothing and says so",
       stub.received.length === 0 && /Usage reporting is off \(environment\)\./.test(off.err), off.err.slice(-120));
     const dnt = await reportingSession(session, { USAGE_REPORTING_ENDPOINT: stub.url, DO_NOT_TRACK: "1" });
     check("DO_NOT_TRACK=1 sends nothing", stub.received.length === 0 && /Usage reporting is off \(environment\)\./.test(dnt.err));
+    check("an opted-out server creates no install ID file", !fs.existsSync(idFile));
   } finally {
     stub.close();
   }

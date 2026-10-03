@@ -198,10 +198,21 @@ npm test
 Usage reporting is on by default: the server sends its name, its version, the
 transport it started on (`startup`), and the name of each tool called
 (`tool-call`) to [trace](https://trace.danielstephenson.dev). Tool arguments,
-notes, queries, and anything about the client, the machine, or the person using
-it are never sent — only names from the server's own tool list, so a name a
-client made up is not sent either. The server says which way it is set on
-stderr every time it starts.
+notes, queries, and anything about the client or the person using it are never
+sent — only names from the server's own tool list, so a name a client made up is
+not sent either. The server says which way it is set on stderr every time it
+starts.
+
+Every event also carries a **random installation ID** (the tag `install`), so
+trace can count installations rather than events. It is a UUID made on first
+run, derived from nothing about the machine or you, and kept in
+`<user data dir>/dpc-mcp-server/trace-install-id` — `$XDG_DATA_HOME` (or
+`~/.local/share`) on Linux, `~/Library/Application Support` on macOS,
+`%APPDATA%` on Windows. Delete the file to reset it, or set `TRACE_INSTALL_ID`
+to pin your own value (useful in a container, whose filesystem does not
+outlive it). On Node 18 (anything before 20.16 or 22.3) the file cannot be used and the ID lasts
+for one run only. Every opt-out below also stops the ID: with reporting off the
+file is never read or created.
 
 To turn it off, any one of these:
 
