@@ -39,8 +39,11 @@ ENV MCP_HTTP_PORT=8080
 
 EXPOSE 8080
 
-# The base image ships a `node` user at uid 1000. Nothing is written at runtime
-# and the graph is read once at startup, so it needs no ownership of anything.
+# The base image ships a `node` user at uid 1000. The graph is read once at
+# startup; the only runtime write is usage reporting's installation ID, under
+# the node user's own home (~/.local/share/dpc-mcp-server/trace-install-id), so
+# it needs no ownership of anything in /app. That file does not outlive the
+# container; set TRACE_INSTALL_ID to keep one ID across redeploys.
 USER node
 
 # A slim base image cannot be assumed to ship curl or wget, and assuming one of
