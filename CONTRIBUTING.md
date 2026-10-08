@@ -111,4 +111,11 @@ proves you did not break it. Do not skip it.
 ## Pull requests
 
 One coherent change per PR. Say what you tested. CI runs the full suite on Node
-18, 20, and 22, and checks that `vendor/` matches the published collection.
+18, 20, and 22, and starts the server with no dependencies installed. It also
+builds the container image, checks that the image carries no `node_modules` and
+does not run as root, drives a session through it over HTTP, and checks that
+`docker stop` exits it cleanly. Any of those can fail a PR.
+
+CI also reports whether `vendor/` is behind the published collection. That check
+is advisory: a behind snapshot is expected between syncs and does not fail a
+PR. Bring it current with `npm run sync` in a PR of its own.
