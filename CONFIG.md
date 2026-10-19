@@ -65,7 +65,7 @@ to open.
 
 | Flag | Variable | Default | Meaning |
 |---|---|---|---|
-| `--http` | `MCP_HTTP_PORT` (set) | off | Serve HTTP instead of stdio. |
+| `--http` | `MCP_HTTP_PORT` (non-empty) | off | Serve HTTP instead of stdio. |
 | `--port <n>` | `MCP_HTTP_PORT` | `8080` | Port to listen on. `0` asks the OS for a free one. |
 | `--host <addr>` | `MCP_HTTP_HOST` | `127.0.0.1` | Address to bind. |
 | — | `MCP_HTTP_ORIGINS` | *(none)* | Comma-separated `Origin` values to accept, or `*` for any. |

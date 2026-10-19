@@ -87,7 +87,7 @@ them, with the concept notes that call it home. Every concept belongs to exactly
 one map. The root map is itself the first entry, with no concepts of its own.
 
 `collection` names the commit of the collection being served, as recorded in
-`vendor/SOURCE.json`, so a caller can tell a stale snapshot from a current one.
+the `SOURCE.json` beside the dataset (`vendor/SOURCE.json` by default), so a caller can tell a stale snapshot from a current one.
 A dataset with no `SOURCE.json` beside it — usually a `DPC_ZK_PATH` checkout —
 has no recorded commit, and it reads
 `{ "note": "Serving an unpinned local checkout." }` instead.
