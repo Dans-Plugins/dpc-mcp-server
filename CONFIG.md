@@ -23,8 +23,9 @@ is serving, on stderr at startup:
 dpc-mcp-server 0.1.0 ready — 45 notes, 90 citations across 9 repositories (vendored copy @ 7c9b5f4eaa)
 ```
 
-Under `--http` a second line follows it, naming the address it bound and the
-health endpoint beside it:
+The usage-reporting notice (see [Usage reporting](#usage-reporting)) follows it
+on both transports. Under `--http` a third line comes after that, naming the
+address it bound and the health endpoint beside it:
 
 ```
 dpc-mcp-server listening on http://127.0.0.1:8080/mcp (health: http://127.0.0.1:8080/healthz)
@@ -64,12 +65,15 @@ to open.
 
 | Flag | Variable | Default | Meaning |
 |---|---|---|---|
-| `--http` | `MCP_HTTP_PORT` (any value) | off | Serve HTTP instead of stdio. |
+| `--http` | `MCP_HTTP_PORT` (set) | off | Serve HTTP instead of stdio. |
 | `--port <n>` | `MCP_HTTP_PORT` | `8080` | Port to listen on. `0` asks the OS for a free one. |
 | `--host <addr>` | `MCP_HTTP_HOST` | `127.0.0.1` | Address to bind. |
 | — | `MCP_HTTP_ORIGINS` | *(none)* | Comma-separated `Origin` values to accept, or `*` for any. |
 
-A flag beats the matching variable. `--help` prints the same summary.
+A flag beats the matching variable. `--help` prints the same summary. An
+`MCP_HTTP_PORT` that is not a port number is refused at startup with exit status
+2 rather than ignored — unless `--port` is given, in which case the variable is
+not read.
 
 The bind address is loopback unless you change it, and that is deliberate: this
 transport has **no authentication of its own**, so putting it on a public

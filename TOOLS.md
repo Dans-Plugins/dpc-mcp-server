@@ -18,8 +18,13 @@ Full-text search. The place to start when you have a topic rather than a note id
 | `limit` | integer 1–50 | no | Maximum results. Default 10. |
 
 Results are ranked by *where* the match landed — a title hit outweighs a
-summary hit, which outweighs a body hit. A note that merely mentions a term
-should not outrank the note that is about it.
+summary hit, which outweighs a tag hit, which outweighs a body hit. A note that
+merely mentions a term should not outrank the note that is about it. Each term
+counts once, at its strongest placement, and the score is then weighted by how
+many of the query's terms the note matched, so a note covering the whole
+question beats one matching a single word loudly. Common filler words ("how",
+"much", "the", …) and single characters are dropped before scoring, unless they
+are all the query contains.
 
 ```json
 {
@@ -28,8 +33,9 @@ should not outrank the note that is about it.
   "returned": 10,
   "results": [
     { "id": "faction-power", "title": "Faction Power", "type": "concept",
-      "moc": "moc-faction-domain-model", "summary": "…",
-      "linkCount": 5, "backlinkCount": 11, "sourceCount": 2 }
+      "moc": "moc-faction-domain-model", "summary": "…", "tags": ["…"],
+      "linkCount": 5, "backlinkCount": 11, "sourceCount": 2,
+      "links": ["…"] }
   ],
   "hint": "2 further matches not shown; raise \"limit\" or narrow the query."
 }
@@ -78,12 +84,25 @@ answering "what does this cover?".
 
 No arguments. Returns each Map of Content in the order the root map presents
 them, with the concept notes that call it home. Every concept belongs to exactly
-one map.
+one map. The root map is itself the first entry, with no concepts of its own.
+
+`collection` names the commit of the collection being served, as recorded in
+`vendor/SOURCE.json`, so a caller can tell a stale snapshot from a current one.
+A dataset with no `SOURCE.json` beside it — usually a `DPC_ZK_PATH` checkout —
+has no recorded commit, and it reads
+`{ "note": "Serving an unpinned local checkout." }` instead.
 
 ```json
 {
   "root": "moc-dans-plugins-community",
+  "collection": {
+    "repo": "Dans-Plugins/dpc-zettelkasten",
+    "ref": "7c9b5f4eaa61403a168192ae77b9d8d2243c4ba2",
+    "url": "https://github.com/Dans-Plugins/dpc-zettelkasten/tree/7c9b5f4eaa61403a168192ae77b9d8d2243c4ba2"
+  },
   "maps": [
+    { "id": "moc-dans-plugins-community", "title": "Dan's Plugins Community",
+      "summary": "…", "concepts": [] },
     { "id": "moc-faction-domain-model", "title": "Faction Domain Model",
       "summary": "…",
       "concepts": [{ "id": "approval-request", "title": "Approval Request" }] }
