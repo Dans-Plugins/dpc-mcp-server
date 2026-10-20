@@ -87,7 +87,7 @@ function build(engine, source) {
       inputSchema: {
         type: "object",
         properties: {
-          query: { type: "string", description: "Words to look for in titles, summaries, and bodies." },
+          query: { type: "string", description: "Words to look for in titles, summaries, tags, and bodies." },
           type: { type: "string", enum: ["concept", "moc"], description: "Restrict to concept notes or Maps of Content." },
           limit: { type: "integer", description: "Maximum results (default 10).", minimum: 1, maximum: 50 },
         },
