@@ -65,6 +65,8 @@ All notable changes to this project are documented here.
 - `Server.respond()` in `src/protocol.js` now owns batch handling, so both
   transports frame the same answers rather than each deciding what a batch
   means.
+- `search_notes`'s `query` argument now says it matches tags as well as
+  titles, summaries, and bodies, which is what the handler has always done.
 
 ## [0.1.0] - 2026-08-08
 
