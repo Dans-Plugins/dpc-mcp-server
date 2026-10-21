@@ -127,6 +127,10 @@ async function rawTests() {
   r = await rawSession([init, { jsonrpc: "2.0", id: 5, method: "tools/call", params: { name: "nope", arguments: {} } }]);
   check("unknown tool is an error", !!r.msgs[1].error, JSON.stringify(r.msgs[1]).slice(0, 120));
 
+  r = await rawSession([init, { jsonrpc: "2.0", id: 6, method: "tools/call", params: { name: "search_notes", arguments: { query: "  " } } }]);
+  check("a blank search query is an invalid-params error",
+    r.msgs[1].error && r.msgs[1].error.code === -32602, JSON.stringify(r.msgs[1]).slice(0, 120));
+
   r = await rawSession([
     { jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "t", version: "0" } } },
   ]);
@@ -199,6 +203,16 @@ async function clientTests() {
   check("a definitional question finds the note that defines it",
     c.json.results[0].id === "vassalage", c.json.results[0].id);
 
+  // "concurrency" is a tag on main-thread-safety and appears nowhere in its
+  // title, summary, or body, so only the tag can have matched it.
+  c = await call("search_notes", { query: "concurrency" });
+  check("a tag alone is enough for search_notes to find a note",
+    c.json.results.some((n) => n.id === "main-thread-safety"), c.json.results.map((n) => n.id).join(", "));
+
+  c = await call("search_notes", { query: "power", limit: 1 });
+  check("search_notes says how many matches a limit hid",
+    c.json.returned === 1 && c.json.matched > 1 && /raise "limit"/.test(c.json.hint || ""), JSON.stringify(c.json.hint));
+
   c = await call("get_note", { id: "demesne-limit" });
   check("get_note returns Markdown", c.json && typeof c.json.markdown === "string" && c.json.markdown.length > 200);
   check("get_note returns citations with pinned permalinks",
@@ -207,6 +221,10 @@ async function clientTests() {
 
   c = await call("get_note", { id: "does-not-exist" });
   check("get_note flags an unknown id as an error", c.r.isError === true, JSON.stringify(c.r.isError));
+
+  c = await call("get_note", { id: "power" });
+  check("get_note suggests ids that contain an unknown one",
+    c.r.isError === true && c.body.includes("faction-power") && c.body.includes("player-power"), c.body.slice(0, 120));
 
   c = await call("list_maps", {});
   check("list_maps returns the hierarchy", c.json && c.json.maps.length === 7, c.json && String(c.json.maps.length));
@@ -228,9 +246,27 @@ async function clientTests() {
   c = await call("graphql", { query: "mutation { x }" });
   check("mutations are refused", c.r.isError === true && /read-only/.test(c.body));
 
+  c = await call("graphql", { query: "{ notes { ...F } }" });
+  check("fragments are refused", c.r.isError === true && /Fragments are not supported/.test(c.body), c.body.slice(0, 120));
+
+  c = await call("graphql", { query: "{ note(id: $id) { title } }" });
+  check("variables are refused with a hint to inline the value",
+    c.r.isError === true && /inline the value/.test(c.body), c.body.slice(0, 120));
+
   c = await call("get_citations", { repo: "Ponder" });
   check("get_citations filters by repository",
     c.json.count > 0 && c.json.citations.every((x) => x.repo.includes("Ponder")), String(c.json.count));
+
+  c = await call("get_citations", { id: "demesne-limit" });
+  check("get_citations narrows to one note's sources",
+    c.json.count > 0 && c.json.citations.every((x) => x.note === "demesne-limit"), String(c.json.count));
+
+  c = await call("get_citations", { path: "claimfill" });
+  check("get_citations filters by file path, ignoring case",
+    c.json.count > 0 && c.json.citations.every((x) => x.path.toLowerCase().includes("claimfill")), String(c.json.count));
+
+  c = await call("get_citations", { id: "does-not-exist" });
+  check("get_citations flags an unknown id as an error", c.r.isError === true, JSON.stringify(c.r.isError));
 
   c = await call("get_schema", {});
   check("get_schema returns SDL", c.body.includes("type Query") && c.body.includes("enum NoteType"));
