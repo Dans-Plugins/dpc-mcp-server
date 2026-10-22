@@ -68,6 +68,13 @@ All notable changes to this project are documented here.
 - `search_notes`'s `query` argument now says it matches tags as well as
   titles, summaries, and bodies, which is what the handler has always done.
 
+### Fixed
+- `search_notes` no longer drops `que` from a query as a stopword. The list is
+  English filler; `que` was a stray, and in any query with other words beside
+  it, it stopped `que` from matching `query` or `unique`. An unreachable
+  Cyrillic entry, which the ASCII-only tokenizer could never produce, is gone
+  as well.
+
 ## [0.1.0] - 2026-08-08
 
 Initial release.

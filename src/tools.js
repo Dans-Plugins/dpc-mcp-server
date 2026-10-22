@@ -24,9 +24,9 @@ const { text, invalid } = require("./protocol.js");
  * note happens to be longest.
  */
 const STOPWORDS = new Set([
-  "a", "об", "an", "and", "are", "as", "at", "be", "but", "by", "can", "do", "does",
+  "a", "an", "and", "are", "as", "at", "be", "but", "by", "can", "do", "does",
   "for", "from", "how", "i", "in", "is", "it", "its", "many", "me", "much", "of",
-  "on", "or", "que", "so", "that", "the", "their", "them", "there", "these", "they",
+  "on", "or", "so", "that", "the", "their", "them", "there", "these", "they",
   "this", "to", "was", "what", "when", "where", "which", "who", "why", "will",
   "with", "would", "you", "your",
 ]);
