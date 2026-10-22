@@ -199,6 +199,13 @@ async function clientTests() {
   check("results carry links, so a near miss is one hop from the answer",
     c.json.results.every((n) => Array.isArray(n.links)));
 
+  // "que" is a substring of "query" and "unique", so a query that keeps it
+  // matches notes that "power" alone does not; dropping it as filler would not.
+  const powerOnly = (await call("search_notes", { query: "power" })).json.matched;
+  c = await call("search_notes", { query: "que power" });
+  check("search_notes keeps a word that is not English filler",
+    c.json.matched > powerOnly, `${c.json.matched} vs ${powerOnly}`);
+
   c = await call("search_notes", { query: "what is a vassal" });
   check("a definitional question finds the note that defines it",
     c.json.results[0].id === "vassalage", c.json.results[0].id);
