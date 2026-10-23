@@ -41,6 +41,9 @@ All notable changes to this project are documented here.
   SDK's `StreamableHTTPClientTransport`: 86 assertions in total, up from 55.
 
 ### Changed
+- The vendored collection is `Dans-Plugins/dpc-zettelkasten@188c93fefb`, up
+  from `7c9b5f4eaa`: 55 notes and 144 citations across 14 repositories, up from
+  45, 90 and 9. The engine, `zk-graphql.js`, is unchanged.
 - The vendored trace client is trace-client-js 0.4.0 (tag `0.4.0`, commit
   1b4d0fb), refreshed with `npm run sync:trace-client -- --ref <sha>`. Every
   event now carries a random installation ID as the tag `install`, so trace can

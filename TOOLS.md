@@ -97,8 +97,8 @@ has no recorded commit, and it reads
   "root": "moc-dans-plugins-community",
   "collection": {
     "repo": "Dans-Plugins/dpc-zettelkasten",
-    "ref": "7c9b5f4eaa61403a168192ae77b9d8d2243c4ba2",
-    "url": "https://github.com/Dans-Plugins/dpc-zettelkasten/tree/7c9b5f4eaa61403a168192ae77b9d8d2243c4ba2"
+    "ref": "188c93fefb312d2035a03ac632d76c6fb2a5c474",
+    "url": "https://github.com/Dans-Plugins/dpc-zettelkasten/tree/188c93fefb312d2035a03ac632d76c6fb2a5c474"
   },
   "maps": [
     { "id": "moc-dans-plugins-community", "title": "Dan's Plugins Community",
@@ -107,7 +107,7 @@ has no recorded commit, and it reads
       "summary": "…",
       "concepts": [{ "id": "approval-request", "title": "Approval Request" }] }
   ],
-  "totals": { "notes": 45, "maps": 7, "concepts": 38, "citations": 90, "repositories": 9 }
+  "totals": { "notes": 55, "maps": 7, "concepts": 48, "citations": 144, "repositories": 14 }
 }
 ```
 
