@@ -278,8 +278,12 @@ async function clientTests() {
   c = await call("get_schema", {});
   check("get_schema returns SDL", c.body.includes("type Query") && c.body.includes("enum NoteType"));
 
+  // Counted from the snapshot rather than written down, so `npm run sync` does
+  // not turn this red every time the collection grows.
+  const noteCount = Object.keys(require(path.join(ROOT, "vendor", "dataset.json")).notes).length;
   const { resources } = await client.listResources();
-  check("every note is exposed as a resource", resources.length === 45, String(resources.length));
+  check("every note is exposed as a resource", resources.length === noteCount,
+    `${resources.length} vs ${noteCount}`);
   check("resource uris use the expected scheme",
     resources.every((r) => r.uri.startsWith("dpc-zettelkasten://note/")));
 
