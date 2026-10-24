@@ -1,6 +1,6 @@
 {
  "meta": {
-  "citationCount": 90,
+  "citationCount": 144,
   "clusters": [
    {
     "moc": "moc-medieval-factions",
@@ -15,7 +15,9 @@
      "approval-request",
      "claimed-chunk",
      "demesne-limit",
+     "duel",
      "faction",
+     "faction-chat-channel",
      "faction-flag",
      "faction-permission",
      "faction-power",
@@ -38,8 +40,10 @@
      "map-integration",
      "notification",
      "optimistic-locking",
+     "player-interaction-status",
      "repository-pattern",
      "service-layer",
+     "spatial-value-types",
      "value-class-identifier",
      "jooq-persistence"
     ],
@@ -48,12 +52,17 @@
    {
     "moc": "moc-plugin-ecosystem",
     "notes": [
+     "alternate-account-finder",
      "currencies",
      "dans-plugin-manager",
      "expansion-plugin",
      "fiefs",
+     "food-spoilage",
      "mailboxes",
-     "ponder"
+     "medieval-roleplay-engine",
+     "ponder",
+     "simple-skills",
+     "wild-pets"
     ],
     "title": "Plugin Ecosystem"
    },
@@ -62,6 +71,7 @@
     "notes": [
      "dpc-conventions",
      "release-automation",
+     "release-channel",
      "testing-and-ci",
      "two-tier-documentation"
     ],
@@ -77,9 +87,9 @@
     "title": "Web and Infrastructure"
    }
   ],
-  "conceptCount": 38,
+  "conceptCount": 48,
   "home": "moc-dans-plugins-community",
-  "linkCount": 302,
+  "linkCount": 369,
   "mocCount": 7,
   "mocOrder": [
    "moc-dans-plugins-community",
@@ -90,21 +100,106 @@
    "moc-conventions-and-process",
    "moc-web-and-infrastructure"
   ],
-  "noteCount": 45,
+  "noteCount": 55,
   "repos": [
+   "Dans-Plugins/AlternateAccountFinder",
    "Dans-Plugins/Currencies",
    "Dans-Plugins/Dans-Plugin-Manager",
    "Dans-Plugins/Fiefs",
+   "Dans-Plugins/FoodSpoilage",
    "Dans-Plugins/Mailboxes",
    "Dans-Plugins/Medieval-Factions",
+   "Dans-Plugins/Medieval-Roleplay-Engine",
    "Dans-Plugins/Ponder",
+   "Dans-Plugins/SimpleSkills",
+   "Dans-Plugins/Wild-Pets",
    "Dans-Plugins/dansplugins-dot-com",
    "Dans-Plugins/dpc-conventions",
    "Dans-Plugins/dpc-mc-server"
   ],
-  "updated": "2026-08-08"
+  "updated": "2026-08-24"
  },
  "notes": {
+  "alternate-account-finder": {
+   "backlinks": [
+    "moc-plugin-ecosystem"
+   ],
+   "body": "\nTwo accounts that have connected from the same IP address are probably one\nperson. Alternate Account Finder acts on that inference: it accumulates a login\nhistory per account and surfaces accounts whose histories overlap.\n\n## What is stored\n\nThe plugin keeps one row per *(address, account)* pair — the address, the\nplayer's UUID, a login counter, and the first and last login timestamps for that\npair. This is not a last-known-IP field: every distinct address an account has\never connected from keeps its own row, and a repeat login from a known address\nincrements that row's counter and refreshes its `last_login`.\n\nNothing removes those rows. The repository offers reads and an upsert and no\ndelete; there is no retention window, purge command, or expiry setting anywhere\nin the plugin. Login history therefore lives as long as the database does. No\ncomment, migration note, or document in the repository explains that choice, so\nthe reason is not recorded.\n\nAddresses are not stored in plaintext. They are AES-encrypted under a 256-bit\nkey kept in the plugin's data folder, in ECB mode with no IV — deliberately, and\nthe class says why: the lookups are equality comparisons on the stored value, so\nthe ciphertext has to be deterministic. The same comment names the cost, that\nECB leaks the pattern of repeated addresses, and scopes the class to this use\nonly. Losing the key makes the history undecryptable, which the plugin warns\nabout loudly on startup.\n\n## Finding alts\n\nA query self-joins the table against itself on equal stored addresses and\nreturns the distinct other UUIDs. Because the comparison is on ciphertext and\nthe encryption is deterministic, the join works without decrypting anything.\nIt is a single hop: accounts that share an address directly, not alts-of-alts.\n\nDetection runs on join. The address is read on the main thread — the comment\ncites issue #65, where it could be null by the time an async task ran — and the\nwrite happens off-thread, the same split described in [[main-thread-safety]].\nA notification fires only on an account's first login from a given address, so\nregulars do not re-alert.\n\n## Related\n\nStorage is the [[jooq-persistence]] stack the community uses generally, behind a\n[[repository-pattern]] boundary. Notifications go through the same optional\nbackend selection as [[notification]], preferring [[mailboxes]] when installed.\n",
+   "id": "alternate-account-finder",
+   "links": [
+    "main-thread-safety",
+    "jooq-persistence",
+    "repository-pattern",
+    "notification",
+    "mailboxes"
+   ],
+   "moc": "moc-plugin-ecosystem",
+   "sourcePath": "notes/concepts/alternate-account-finder.md",
+   "sourceUrl": "https://github.com/Dans-Plugins/dpc-zettelkasten/blob/main/notes/concepts/alternate-account-finder.md",
+   "sources": [
+    {
+     "claim": "The sole table holds one row per (address, player UUID) pair, storing a login count and the first and last login timestamps for that pair, with the pair as the primary key.",
+     "label": "AlternateAccountFinder/V1__Initial_version.sql:1-8",
+     "lines": "1-8",
+     "path": "src/main/resources/com/dansplugins/detectionsystem/db/migration/V1__Initial_version.sql",
+     "ref": "88353003ae38472975ddd042b830b4447fdbf18a",
+     "repo": "Dans-Plugins/AlternateAccountFinder",
+     "shortRef": "8835300",
+     "url": "https://github.com/Dans-Plugins/AlternateAccountFinder/blob/88353003ae38472975ddd042b830b4447fdbf18a/src/main/resources/com/dansplugins/detectionsystem/db/migration/V1__Initial_version.sql#L1-L8"
+    },
+    {
+     "claim": "Potential alternate accounts are found by self-joining the login table on equal stored address values and selecting the distinct other UUIDs, not by comparing a single last-known IP.",
+     "label": "AlternateAccountFinder/LoginRepository.java:95-112",
+     "lines": "95-112",
+     "path": "src/main/java/com/dansplugins/detectionsystem/logins/LoginRepository.java",
+     "ref": "88353003ae38472975ddd042b830b4447fdbf18a",
+     "repo": "Dans-Plugins/AlternateAccountFinder",
+     "shortRef": "8835300",
+     "url": "https://github.com/Dans-Plugins/AlternateAccountFinder/blob/88353003ae38472975ddd042b830b4447fdbf18a/src/main/java/com/dansplugins/detectionsystem/logins/LoginRepository.java#L95-L112"
+    },
+    {
+     "claim": "The repository exposes only reads and an upsert that increments the login counter; it contains no operation that deletes or expires a login record.",
+     "label": "AlternateAccountFinder/LoginRepository.java:22-135",
+     "lines": "22-135",
+     "path": "src/main/java/com/dansplugins/detectionsystem/logins/LoginRepository.java",
+     "ref": "88353003ae38472975ddd042b830b4447fdbf18a",
+     "repo": "Dans-Plugins/AlternateAccountFinder",
+     "shortRef": "8835300",
+     "url": "https://github.com/Dans-Plugins/AlternateAccountFinder/blob/88353003ae38472975ddd042b830b4447fdbf18a/src/main/java/com/dansplugins/detectionsystem/logins/LoginRepository.java#L22-L135"
+    },
+    {
+     "claim": "Addresses are stored as Base64 AES/ECB ciphertext under a fixed on-disk key, and the class documents that determinism is required so encrypted IPs can be compared for equality in database lookups.",
+     "label": "AlternateAccountFinder/IpEncryption.java:18-50",
+     "lines": "18-50",
+     "path": "src/main/java/com/dansplugins/detectionsystem/encryption/IpEncryption.java",
+     "ref": "88353003ae38472975ddd042b830b4447fdbf18a",
+     "repo": "Dans-Plugins/AlternateAccountFinder",
+     "shortRef": "8835300",
+     "url": "https://github.com/Dans-Plugins/AlternateAccountFinder/blob/88353003ae38472975ddd042b830b4447fdbf18a/src/main/java/com/dansplugins/detectionsystem/encryption/IpEncryption.java#L18-L50"
+    },
+    {
+     "claim": "Every player join records a login, and moderators listed in notify-users are notified only when that join is the account's first from that address.",
+     "label": "AlternateAccountFinder/PlayerJoinListener.java:26-64",
+     "lines": "26-64",
+     "path": "src/main/java/com/dansplugins/detectionsystem/listeners/PlayerJoinListener.java",
+     "ref": "88353003ae38472975ddd042b830b4447fdbf18a",
+     "repo": "Dans-Plugins/AlternateAccountFinder",
+     "shortRef": "8835300",
+     "url": "https://github.com/Dans-Plugins/AlternateAccountFinder/blob/88353003ae38472975ddd042b830b4447fdbf18a/src/main/java/com/dansplugins/detectionsystem/listeners/PlayerJoinListener.java#L26-L64"
+    }
+   ],
+   "summary": "A moderation plugin that keeps a permanent per-account login history keyed by encrypted IP address, and reports accounts that share one.",
+   "tags": [
+    "alternate-account-finder",
+    "moderation",
+    "ecosystem",
+    "persistence"
+   ],
+   "text": "alternate account finder a moderation plugin that keeps a permanent per-account login history keyed by encrypted ip address, and reports accounts that share one. \ntwo accounts that have connected from the same ip address are probably one\nperson. alternate account finder acts on that inference: it accumulates a login\nhistory per account and surfaces accounts whose histories overlap.\n\n## what is stored\n\nthe plugin keeps one row per *(address, account)* pair — the address, the\nplayer's uuid, a login counter, and the first and last login timestamps for that\npair. this is not a last-known-ip field: every distinct address an account has\never connected from keeps its own row, and a repeat login from a known address\nincrements that row's counter and refreshes its `last_login`.\n\nnothing removes those rows. the repository offers reads and an upsert and no\ndelete; there is no retention window, purge command, or expiry setting anywhere\nin the plugin. login history therefore lives as long as the database does. no\ncomment, migration note, or document in the repository explains that choice, so\nthe reason is not recorded.\n\naddresses are not stored in plaintext. they are aes-encrypted under a 256-bit\nkey kept in the plugin's data folder, in ecb mode with no iv — deliberately, and\nthe class says why: the lookups are equality comparisons on the stored value, so\nthe ciphertext has to be deterministic. the same comment names the cost, that\necb leaks the pattern of repeated addresses, and scopes the class to this use\nonly. losing the key makes the history undecryptable, which the plugin warns\nabout loudly on startup.\n\n## finding alts\n\na query self-joins the table against itself on equal stored addresses and\nreturns the distinct other uuids. because the comparison is on ciphertext and\nthe encryption is deterministic, the join works without decrypting anything.\nit is a single hop: accounts that share an address directly, not alts-of-alts.\n\ndetection runs on join. the address is read on the main thread — the comment\ncites issue #65, where it could be null by the time an async task ran — and the\nwrite happens off-thread, the same split described in [[main-thread-safety]].\na notification fires only on an account's first login from a given address, so\nregulars do not re-alert.\n\n## related\n\nstorage is the [[jooq-persistence]] stack the community uses generally, behind a\n[[repository-pattern]] boundary. notifications go through the same optional\nbackend selection as [[notification]], preferring [[mailboxes]] when installed.\n",
+   "title": "Alternate Account Finder",
+   "type": "concept",
+   "updated": "2026-08-24"
+  },
   "approval-request": {
    "backlinks": [
     "faction-relationship",
@@ -168,7 +263,8 @@
     "map-integration",
     "moc-dans-plugins-community",
     "moc-faction-domain-model",
-    "moc-plugin-ecosystem"
+    "moc-plugin-ecosystem",
+    "spatial-value-types"
    ],
    "body": "\nA claim is a single Minecraft chunk — a 16×16 column — assigned to a [[faction]].\nThere is no polygon, no region, and no bounding box: territory is a set of chunk\ncoordinates, and every question about land reduces to a lookup on\n`(worldId, x, z)`.\n\n## The shape of the record\n\n`MfClaimedChunk` holds four fields and no behaviour: the world UUID, the chunk's\n`x` and `z`, and the owning `factionId`. It is the smallest record that can answer\n\"who owns this ground?\", and it holds nothing else.\n\nNote the direction of the reference. The chunk points at the faction; the\n[[faction]] record does not hold a list of its claims. Territory is therefore\nqueried, not traversed — which is why `MfClaimService` exists and why counting a\nfaction's claims is a repository call rather than a property read.\n\n## Why chunks\n\nChunk granularity is inherited from Minecraft itself. The server already loads,\nunloads, and indexes the world by chunk, so a claim boundary that coincides with\na chunk boundary is free to check: given a block, the containing chunk is\narithmetic, and the ownership lookup is a single map hit. A finer boundary would\nhave cost a spatial index on the hot path of every block placement.\n\nThe visible consequence for players is that borders are always square and always\naligned to the world grid — which is also what makes [[map-integration]] cheap to\nrender.\n\n## What a claim controls\n\nOwnership by itself grants nothing. Whether a given player may build inside a\nclaim is resolved from [[faction-permission]] for members and from\n[[faction-flag]] settings for outsiders, allies, and the [[vassalage]] chain.\n\n## Related\n\nHow *much* land a faction may claim is capped by [[demesne-limit]], derived from\n[[faction-power]]. Claims are also the payload that\n[[map-integration]] renders and that [[fiefs]] subdivides.\n",
    "id": "claimed-chunk",
@@ -279,11 +375,13 @@
     "moc-dans-plugins-community",
     "moc-plugin-ecosystem",
     "moc-web-and-infrastructure",
-    "release-automation"
+    "release-automation",
+    "release-channel"
    ],
-   "body": "\nDPM is a package manager for the community's own plugins, run from inside a\nMinecraft server. `/dpm get medieval-factions` downloads the latest release jar\ninto the plugins folder.\n\n## A package manager's vocabulary\n\nThe command set is the giveaway: `list`, `get`, `update`, `remove`, `search`,\n`info`, `clean`. These are apt and dnf commands, ported to a game console.\n\n`/dpm info` is the most useful of them — it reports the GitHub owner and repo,\nthe latest release tag and publish date, whether the plugin is installed, and\n**whether its dependencies are satisfied**. That last field matters in an\necosystem where [[expansion-plugin|expansions]] hard-depend on\n[[medieval-factions]] and simply fail to load without it.\n\n`/dpm clean` addresses the failure mode that follows from downloading jars: two\nversions of the same plugin left in the folder. Like `remove`, it previews by\ndefault and requires `--confirm` to actually delete — a good default for a\ncommand that removes files from a live server.\n\n## GitHub releases as the registry\n\nThere is no separate package index. DPM reads GitHub releases directly, which is\nwhy [[release-automation]] matters operationally rather than merely\ncosmetically: a release without an attached jar is invisible to DPM. A\nconfigurable `githubToken` exists for rate limits.\n\n## Related\n\nDPM solves plugin distribution for an operator's own server;\n[[dpc-mc-server]] solves it by pinning jars into a Docker image instead. The two\nanswer the same question with opposite trade-offs — live and current, versus\nreproducible and fixed.\n",
+   "body": "\nDPM is a package manager for the community's own plugins, run from inside a\nMinecraft server. `/dpm get medieval-factions` downloads the latest release jar\ninto the plugins folder.\n\n## A package manager's vocabulary\n\nThe command set is the giveaway: `list`, `get`, `update`, `remove`, `search`,\n`info`, `clean`. These are apt and dnf commands, ported to a game console.\n\n`/dpm info` is the most useful of them — it reports the GitHub owner and repo,\nwhich [[release-channel|channel]] the plugin is on and the latest build on that\nchannel, its publish date, whether the plugin is installed, and **whether its\ndependencies are satisfied**. That last field matters in an\necosystem where [[expansion-plugin|expansions]] hard-depend on\n[[medieval-factions]] and simply fail to load without it.\n\nDPM does not only choose *which plugin* to install but *which build* of it: each\nmanaged plugin tracks a [[release-channel]], either published releases or a\nrolling build of `main`, and the choice sticks until it is changed.\n\n`/dpm clean` addresses the failure mode that follows from downloading jars: two\nversions of the same plugin left in the folder. Like `remove`, it previews by\ndefault and requires `--confirm` to actually delete — a good default for a\ncommand that removes files from a live server.\n\n## GitHub releases as the registry\n\nThere is no separate package index. DPM reads GitHub releases directly, which is\nwhy [[release-automation]] matters operationally rather than merely\ncosmetically: a release without an attached jar is invisible to DPM. A\nconfigurable `githubToken` exists for rate limits.\n\n## Related\n\nDPM solves plugin distribution for an operator's own server;\n[[dpc-mc-server]] solves it by pinning jars into a Docker image instead. The two\nanswer the same question with opposite trade-offs — live and current, versus\nreproducible and fixed.\n",
    "id": "dans-plugin-manager",
    "links": [
+    "release-channel",
     "expansion-plugin",
     "medieval-factions",
     "release-automation",
@@ -298,20 +396,20 @@
      "label": "Dans-Plugin-Manager/README.md",
      "lines": "",
      "path": "README.md",
-     "ref": "7b302f2820a017373558a50f752697226f9ec975",
+     "ref": "3733eb51df6be11ac0239d7cffcfb2ef72e756a9",
      "repo": "Dans-Plugins/Dans-Plugin-Manager",
-     "shortRef": "7b302f2",
-     "url": "https://github.com/Dans-Plugins/Dans-Plugin-Manager/blob/7b302f2820a017373558a50f752697226f9ec975/README.md"
+     "shortRef": "3733eb5",
+     "url": "https://github.com/Dans-Plugins/Dans-Plugin-Manager/blob/3733eb51df6be11ac0239d7cffcfb2ef72e756a9/README.md"
     },
     {
-     "claim": "The command set covers list, get, update, remove, clean, search, info, stats and reload, with info reporting the GitHub owner, repo, latest release tag, publish date, install status and dependency status.",
+     "claim": "The command set covers list, get, update, remove, clean, search, info, stats and reload, with info reporting the description, GitHub owner, repo, release channel, latest build on that channel, publish date, install status and dependency status.",
      "label": "Dans-Plugin-Manager/COMMANDS.md",
      "lines": "",
      "path": "COMMANDS.md",
-     "ref": "7b302f2820a017373558a50f752697226f9ec975",
+     "ref": "3733eb51df6be11ac0239d7cffcfb2ef72e756a9",
      "repo": "Dans-Plugins/Dans-Plugin-Manager",
-     "shortRef": "7b302f2",
-     "url": "https://github.com/Dans-Plugins/Dans-Plugin-Manager/blob/7b302f2820a017373558a50f752697226f9ec975/COMMANDS.md"
+     "shortRef": "3733eb5",
+     "url": "https://github.com/Dans-Plugins/Dans-Plugin-Manager/blob/3733eb51df6be11ac0239d7cffcfb2ef72e756a9/COMMANDS.md"
     }
    ],
    "summary": "A plugin that installs other DPC plugins from in-game or the console, pulling releases straight from GitHub.",
@@ -320,10 +418,10 @@
     "ecosystem",
     "tooling"
    ],
-   "text": "dan's plugin manager a plugin that installs other dpc plugins from in-game or the console, pulling releases straight from github. \ndpm is a package manager for the community's own plugins, run from inside a\nminecraft server. `/dpm get medieval-factions` downloads the latest release jar\ninto the plugins folder.\n\n## a package manager's vocabulary\n\nthe command set is the giveaway: `list`, `get`, `update`, `remove`, `search`,\n`info`, `clean`. these are apt and dnf commands, ported to a game console.\n\n`/dpm info` is the most useful of them — it reports the github owner and repo,\nthe latest release tag and publish date, whether the plugin is installed, and\n**whether its dependencies are satisfied**. that last field matters in an\necosystem where [[expansion-plugin|expansions]] hard-depend on\n[[medieval-factions]] and simply fail to load without it.\n\n`/dpm clean` addresses the failure mode that follows from downloading jars: two\nversions of the same plugin left in the folder. like `remove`, it previews by\ndefault and requires `--confirm` to actually delete — a good default for a\ncommand that removes files from a live server.\n\n## github releases as the registry\n\nthere is no separate package index. dpm reads github releases directly, which is\nwhy [[release-automation]] matters operationally rather than merely\ncosmetically: a release without an attached jar is invisible to dpm. a\nconfigurable `githubtoken` exists for rate limits.\n\n## related\n\ndpm solves plugin distribution for an operator's own server;\n[[dpc-mc-server]] solves it by pinning jars into a docker image instead. the two\nanswer the same question with opposite trade-offs — live and current, versus\nreproducible and fixed.\n",
+   "text": "dan's plugin manager a plugin that installs other dpc plugins from in-game or the console, pulling releases straight from github. \ndpm is a package manager for the community's own plugins, run from inside a\nminecraft server. `/dpm get medieval-factions` downloads the latest release jar\ninto the plugins folder.\n\n## a package manager's vocabulary\n\nthe command set is the giveaway: `list`, `get`, `update`, `remove`, `search`,\n`info`, `clean`. these are apt and dnf commands, ported to a game console.\n\n`/dpm info` is the most useful of them — it reports the github owner and repo,\nwhich [[release-channel|channel]] the plugin is on and the latest build on that\nchannel, its publish date, whether the plugin is installed, and **whether its\ndependencies are satisfied**. that last field matters in an\necosystem where [[expansion-plugin|expansions]] hard-depend on\n[[medieval-factions]] and simply fail to load without it.\n\ndpm does not only choose *which plugin* to install but *which build* of it: each\nmanaged plugin tracks a [[release-channel]], either published releases or a\nrolling build of `main`, and the choice sticks until it is changed.\n\n`/dpm clean` addresses the failure mode that follows from downloading jars: two\nversions of the same plugin left in the folder. like `remove`, it previews by\ndefault and requires `--confirm` to actually delete — a good default for a\ncommand that removes files from a live server.\n\n## github releases as the registry\n\nthere is no separate package index. dpm reads github releases directly, which is\nwhy [[release-automation]] matters operationally rather than merely\ncosmetically: a release without an attached jar is invisible to dpm. a\nconfigurable `githubtoken` exists for rate limits.\n\n## related\n\ndpm solves plugin distribution for an operator's own server;\n[[dpc-mc-server]] solves it by pinning jars into a docker image instead. the two\nanswer the same question with opposite trade-offs — live and current, versus\nreproducible and fixed.\n",
    "title": "Dan's Plugin Manager",
    "type": "concept",
-   "updated": "2026-08-07"
+   "updated": "2026-08-23"
   },
   "dansplugins-dot-com": {
    "backlinks": [
@@ -548,11 +646,13 @@
    "backlinks": [
     "dans-plugin-manager",
     "fiefs",
+    "food-spoilage",
     "mailboxes",
     "map-integration",
     "moc-dans-plugins-community",
     "moc-plugin-ecosystem",
     "moc-web-and-infrastructure",
+    "simple-skills",
     "testing-and-ci"
    ],
    "body": "\ndpc-mc-server is the community's server as code: a `Dockerfile` and a\n`compose.yml` that produce a Spigot server with eighteen DPC plugins already\ninstalled.\n\n## Pinned jars, not downloads\n\nPlugin jars are committed under `resources/jars/` at explicit versions —\n`Fiefs-0.10.jar`, `Dans-Essentials-2.3.0.jar`, and so on. The image does not\nfetch the latest release at build time.\n\nThat is the opposite choice from [[dans-plugin-manager]], and for a good reason:\nthis repository's value is that a given commit always produces the same server.\nThe cost is that upgrading a plugin is a commit, and the pinned set drifts behind\ncurrent releases until someone updates it.\n\n## A toggle per plugin\n\nEvery plugin has a `<PLUGIN>_ENABLED` environment variable threaded from `.env`\nthrough `compose.yml` into the container. Bisecting a plugin interaction is\ntherefore a matter of flipping variables and restarting, with no image rebuild.\n\nPorts 25565 (game), 8123 (Dynmap), and 8100 (BlueMap) are exposed, so both\n[[map-integration]] surfaces can be compared side by side against the same world.\n\n## The de facto integration environment\n\nBecause it runs [[medieval-factions]], [[fiefs]], [[currencies]], and\n[[mailboxes]] together, this is where cross-plugin behaviour actually gets\nexercised. [[testing-and-ci]] covers per-repository testing; nothing else in the\norganization tests the plugins as a set.\n\n## The deposit box\n\nA `deposit-box/` directory is bind-mounted into the container, with a\n`plugin-overrides/` subdirectory — the hatch for dropping a locally built jar\nover a pinned one without rebuilding the image. That is the loop for testing an\nunreleased change against the full plugin set.\n\n## Related\n\nThird-party plugins are bundled alongside the community's own, so the\nenvironment matches what a real server operator would run.\n",
@@ -602,12 +702,135 @@
    "type": "concept",
    "updated": "2026-08-07"
   },
+  "duel": {
+   "backlinks": [
+    "moc-dans-plugins-community",
+    "moc-faction-domain-model",
+    "spatial-value-types"
+   ],
+   "body": "\nA duel is a fight two players agree to, which nobody dies in. It sits inside\n[[medieval-factions]] without touching the faction model at all: no\n[[faction]] id appears anywhere on the record, and challenger and challenged are\nplain player ids.\n\n## The record is a snapshot\n\n`MfDuel` stores both participants' **health and position as they were when the\nduel began**, taken at the moment the invite is accepted, along with an end\ntime. Positions use [[spatial-value-types|MfPosition]], so yaw and pitch are\ncaptured too; the duellists are put back facing the way they were.\n\n## Death is replaced, not survived\n\nThe interesting mechanic is in `EntityDamageListener`. When a participant would\ndrop to zero health or below, the damage event is **cancelled** — the losing\nblow never lands. Both players are then cleaned up and reset: potion effects\ncleared, fire extinguished, health restored, teleported back. The winner is\nrestored too, so a duel costs neither side anything material.\n\nWhat changes hands is a trophy: the winner is given the loser's head — a\n`PLAYER_HEAD` carrying the loser as its owning player, named after them, with\nthe lore *\"Lost in a duel against\"* the winner — dropped at their feet if their\ninventory is full. The duel row is then deleted.\n\n## Ending on time\n\nA duel also ends when its clock runs out. A repeating task drives a boss bar per\nduel from the remaining time against the configured `duels.duration` (default\n`PT2M`, parsed as an ISO-8601 duration), and on expiry runs the identical\nrestoration and announces a **tie** to players within `duels.notificationDistance`\nblocks. Both outcomes share the same ending; only the message and the head\ndiffer.\n\n## Why it is persisted\n\nDuels go through the [[service-layer]] to a repository and carry a `version` for\n[[optimistic-locking]], and the service loads them all at startup. A duel\ntherefore outlives a restart mid-fight — and because the boss bar does not, the\nplugin sweeps boss bars named `duel_*` whose duel no longer exists during\nstartup.\n\n## Related\n\nLike [[locked-block]], a duel is player-owned state living inside a\nfaction-shaped plugin. Its restoration path is also why an in-flight teleport is\ncancelled on damage, handled in the same listener.\n",
+   "id": "duel",
+   "links": [
+    "medieval-factions",
+    "faction",
+    "spatial-value-types",
+    "service-layer",
+    "optimistic-locking",
+    "locked-block"
+   ],
+   "moc": "moc-faction-domain-model",
+   "sourcePath": "notes/concepts/duel.md",
+   "sourceUrl": "https://github.com/Dans-Plugins/dpc-zettelkasten/blob/main/notes/concepts/duel.md",
+   "sources": [
+    {
+     "claim": "A duel records both player ids, both starting health values, both starting positions and an end time.",
+     "label": "Medieval-Factions/MfDuel.kt:7-20",
+     "lines": "7-20",
+     "path": "src/main/kotlin/com/dansplugins/factionsystem/duel/MfDuel.kt",
+     "ref": "3a51c55366b544d31429fae8bcb64efaf1878e15",
+     "repo": "Dans-Plugins/Medieval-Factions",
+     "shortRef": "3a51c55",
+     "url": "https://github.com/Dans-Plugins/Medieval-Factions/blob/3a51c55366b544d31429fae8bcb64efaf1878e15/src/main/kotlin/com/dansplugins/factionsystem/duel/MfDuel.kt#L7-L20"
+    },
+    {
+     "claim": "Accepting an invite deletes the invite and creates the duel, snapshotting each player's current health and location and setting the end time to now plus the configured duels.duration.",
+     "label": "Medieval-Factions/MfDuelAcceptCommand.kt:81-95",
+     "lines": "81-95",
+     "path": "src/main/kotlin/com/dansplugins/factionsystem/command/duel/accept/MfDuelAcceptCommand.kt",
+     "ref": "3a51c55366b544d31429fae8bcb64efaf1878e15",
+     "repo": "Dans-Plugins/Medieval-Factions",
+     "shortRef": "3a51c55",
+     "url": "https://github.com/Dans-Plugins/Medieval-Factions/blob/3a51c55366b544d31429fae8bcb64efaf1878e15/src/main/kotlin/com/dansplugins/factionsystem/command/duel/accept/MfDuelAcceptCommand.kt#L81-L95"
+    },
+    {
+     "claim": "When damage during a duel would take a participant to zero health or below the damage event is cancelled, and both duellists have their potion effects cleared, fire ticks zeroed, health set back to the recorded starting value and are teleported to their recorded starting position.",
+     "label": "Medieval-Factions/EntityDamageListener.kt:31-55",
+     "lines": "31-55",
+     "path": "src/main/kotlin/com/dansplugins/factionsystem/listener/EntityDamageListener.kt",
+     "ref": "3a51c55366b544d31429fae8bcb64efaf1878e15",
+     "repo": "Dans-Plugins/Medieval-Factions",
+     "shortRef": "3a51c55",
+     "url": "https://github.com/Dans-Plugins/Medieval-Factions/blob/3a51c55366b544d31429fae8bcb64efaf1878e15/src/main/kotlin/com/dansplugins/factionsystem/listener/EntityDamageListener.kt#L31-L55"
+    },
+    {
+     "claim": "The winner is given a head belonging to the loser, dropped on the ground if their inventory is full, nearby players are told who won, and the duel row is then deleted asynchronously.",
+     "label": "Medieval-Factions/EntityDamageListener.kt:56-101",
+     "lines": "56-101",
+     "path": "src/main/kotlin/com/dansplugins/factionsystem/listener/EntityDamageListener.kt",
+     "ref": "3a51c55366b544d31429fae8bcb64efaf1878e15",
+     "repo": "Dans-Plugins/Medieval-Factions",
+     "shortRef": "3a51c55",
+     "url": "https://github.com/Dans-Plugins/Medieval-Factions/blob/3a51c55366b544d31429fae8bcb64efaf1878e15/src/main/kotlin/com/dansplugins/factionsystem/listener/EntityDamageListener.kt#L56-L101"
+    },
+    {
+     "claim": "The trophy is a PLAYER_HEAD whose owning player is the loser, named after them and given the lore \"Lost in a duel against\" the winner.",
+     "label": "Medieval-Factions/EntityDamageListener.kt:106-118",
+     "lines": "106-118",
+     "path": "src/main/kotlin/com/dansplugins/factionsystem/listener/EntityDamageListener.kt",
+     "ref": "3a51c55366b544d31429fae8bcb64efaf1878e15",
+     "repo": "Dans-Plugins/Medieval-Factions",
+     "shortRef": "3a51c55",
+     "url": "https://github.com/Dans-Plugins/Medieval-Factions/blob/3a51c55366b544d31429fae8bcb64efaf1878e15/src/main/kotlin/com/dansplugins/factionsystem/listener/EntityDamageListener.kt#L106-L118"
+    },
+    {
+     "claim": "The duel service loads every stored duel and duel invite into memory in its constructor.",
+     "label": "Medieval-Factions/MfDuelService.kt:25-35",
+     "lines": "25-35",
+     "path": "src/main/kotlin/com/dansplugins/factionsystem/duel/MfDuelService.kt",
+     "ref": "3a51c55366b544d31429fae8bcb64efaf1878e15",
+     "repo": "Dans-Plugins/Medieval-Factions",
+     "shortRef": "3a51c55",
+     "url": "https://github.com/Dans-Plugins/Medieval-Factions/blob/3a51c55366b544d31429fae8bcb64efaf1878e15/src/main/kotlin/com/dansplugins/factionsystem/duel/MfDuelService.kt#L25-L35"
+    },
+    {
+     "claim": "At startup the plugin removes any boss bar keyed duel_ whose duel no longer exists.",
+     "label": "Medieval-Factions/MedievalFactions.kt:406-421",
+     "lines": "406-421",
+     "path": "src/main/kotlin/com/dansplugins/factionsystem/MedievalFactions.kt",
+     "ref": "3a51c55366b544d31429fae8bcb64efaf1878e15",
+     "repo": "Dans-Plugins/Medieval-Factions",
+     "shortRef": "3a51c55",
+     "url": "https://github.com/Dans-Plugins/Medieval-Factions/blob/3a51c55366b544d31429fae8bcb64efaf1878e15/src/main/kotlin/com/dansplugins/factionsystem/MedievalFactions.kt#L406-L421"
+    },
+    {
+     "claim": "A repeating task drives each duel's boss bar from the time remaining and, once the end time passes, performs the same restoration and announces a tie.",
+     "label": "Medieval-Factions/MedievalFactions.kt:423-461",
+     "lines": "423-461",
+     "path": "src/main/kotlin/com/dansplugins/factionsystem/MedievalFactions.kt",
+     "ref": "3a51c55366b544d31429fae8bcb64efaf1878e15",
+     "repo": "Dans-Plugins/Medieval-Factions",
+     "shortRef": "3a51c55",
+     "url": "https://github.com/Dans-Plugins/Medieval-Factions/blob/3a51c55366b544d31429fae8bcb64efaf1878e15/src/main/kotlin/com/dansplugins/factionsystem/MedievalFactions.kt#L423-L461"
+    },
+    {
+     "claim": "Duels default to a duration of PT2M and a notification distance of 64.",
+     "label": "Medieval-Factions/config.yml:111-113",
+     "lines": "111-113",
+     "path": "src/main/resources/config.yml",
+     "ref": "3a51c55366b544d31429fae8bcb64efaf1878e15",
+     "repo": "Dans-Plugins/Medieval-Factions",
+     "shortRef": "3a51c55",
+     "url": "https://github.com/Dans-Plugins/Medieval-Factions/blob/3a51c55366b544d31429fae8bcb64efaf1878e15/src/main/resources/config.yml#L111-L113"
+    }
+   ],
+   "summary": "A consented fight between two players in which the losing blow is cancelled and both duellists are restored to the health and position they started from.",
+   "tags": [
+    "medieval-factions",
+    "domain-model",
+    "combat"
+   ],
+   "text": "duel a consented fight between two players in which the losing blow is cancelled and both duellists are restored to the health and position they started from. \na duel is a fight two players agree to, which nobody dies in. it sits inside\n[[medieval-factions]] without touching the faction model at all: no\n[[faction]] id appears anywhere on the record, and challenger and challenged are\nplain player ids.\n\n## the record is a snapshot\n\n`mfduel` stores both participants' **health and position as they were when the\nduel began**, taken at the moment the invite is accepted, along with an end\ntime. positions use [[spatial-value-types|mfposition]], so yaw and pitch are\ncaptured too; the duellists are put back facing the way they were.\n\n## death is replaced, not survived\n\nthe interesting mechanic is in `entitydamagelistener`. when a participant would\ndrop to zero health or below, the damage event is **cancelled** — the losing\nblow never lands. both players are then cleaned up and reset: potion effects\ncleared, fire extinguished, health restored, teleported back. the winner is\nrestored too, so a duel costs neither side anything material.\n\nwhat changes hands is a trophy: the winner is given the loser's head — a\n`player_head` carrying the loser as its owning player, named after them, with\nthe lore *\"lost in a duel against\"* the winner — dropped at their feet if their\ninventory is full. the duel row is then deleted.\n\n## ending on time\n\na duel also ends when its clock runs out. a repeating task drives a boss bar per\nduel from the remaining time against the configured `duels.duration` (default\n`pt2m`, parsed as an iso-8601 duration), and on expiry runs the identical\nrestoration and announces a **tie** to players within `duels.notificationdistance`\nblocks. both outcomes share the same ending; only the message and the head\ndiffer.\n\n## why it is persisted\n\nduels go through the [[service-layer]] to a repository and carry a `version` for\n[[optimistic-locking]], and the service loads them all at startup. a duel\ntherefore outlives a restart mid-fight — and because the boss bar does not, the\nplugin sweeps boss bars named `duel_*` whose duel no longer exists during\nstartup.\n\n## related\n\nlike [[locked-block]], a duel is player-owned state living inside a\nfaction-shaped plugin. its restoration path is also why an in-flight teleport is\ncancelled on damage, handled in the same listener.\n",
+   "title": "Duel",
+   "type": "concept",
+   "updated": "2026-08-14"
+  },
   "expansion-plugin": {
    "backlinks": [
     "currencies",
     "dans-plugin-manager",
     "faction-events",
     "fiefs",
+    "food-spoilage",
     "moc-dans-plugins-community",
     "moc-medieval-factions",
     "moc-plugin-architecture",
@@ -676,6 +899,8 @@
     "approval-request",
     "claimed-chunk",
     "currencies",
+    "duel",
+    "faction-chat-channel",
     "faction-events",
     "faction-flag",
     "faction-permission",
@@ -763,6 +988,98 @@
    "title": "Faction",
    "type": "concept",
    "updated": "2026-08-07"
+  },
+  "faction-chat-channel": {
+   "backlinks": [
+    "medieval-roleplay-engine",
+    "moc-dans-plugins-community",
+    "moc-faction-domain-model",
+    "moc-plugin-ecosystem"
+   ],
+   "body": "\nA player in a [[faction]] can direct their chat to one of three audiences:\n`FACTION`, `VASSALS`, or `ALLIES`. The selection is a nullable field on the same\npersisted player record that carries [[player-power]] — `null` means ordinary\nserver chat — so the channel a player was last talking in is stored rather than\nheld for the session.\n\n## The audience is a query, not a list\n\nNo channel has members. Each is a rule evaluated against the diplomacy graph\nevery time someone speaks, which means the audience tracks\n[[faction-relationship]] changes with no subscription to maintain.\n\n- **`FACTION`** — the faction's own members.\n- **`VASSALS`** — not the speaker's direct vassals. The service walks the liege\n  chain to its **top** and addresses that faction's members plus every faction\n  in its vassal tree. Realm-wide chat, reached from anywhere in the hierarchy;\n  see [[vassalage]].\n- **`ALLIES`** — own members, plus the members of allies **whose alliance is\n  reciprocated**. An ally faction is included only if the reverse relationship\n  is also `ALLY`.\n\nThat last rule is worth noticing. [[faction-relationship]] stores directed\nedges, and the service checks the pairing for liege and vassal edges; here the\nsame suspicion is applied to alliance, at the call site, so a one-sided `ALLY`\nrow grants no access to allied chat.\n\n## Written down, not read back\n\nAfter delivery the message is persisted asynchronously as an\n`MfChatChannelMessage` — timestamp, sender, faction, channel, and text — keeping\nthe database write off the main thread, per [[main-thread-safety]]. The service\noffers paged reads and a count over a faction's history.\n\nAt this commit **nothing outside the `chat` package calls those read methods.**\nThe log is written and retained; no comment, commit message or document in the\nrepository records what it is for.\n\n## Formatting\n\nEach channel has a configurable format string under `chat` in `config.yml`, with\nplaceholders for faction colour, name, role and message. One detail is worth\nflagging for anyone editing this code: the hard-coded fallback used when a\nformat key is missing selects its template from the *sending player's currently\nselected channel* rather than from the channel argument the method was called\nwith. The two normally agree. Nothing in the repository explains the difference.\n",
+   "id": "faction-chat-channel",
+   "links": [
+    "faction",
+    "player-power",
+    "faction-relationship",
+    "vassalage",
+    "main-thread-safety"
+   ],
+   "moc": "moc-faction-domain-model",
+   "sourcePath": "notes/concepts/faction-chat-channel.md",
+   "sourceUrl": "https://github.com/Dans-Plugins/dpc-zettelkasten/blob/main/notes/concepts/faction-chat-channel.md",
+   "sources": [
+    {
+     "claim": "There are exactly three faction chat channels — FACTION, VASSALS and ALLIES.",
+     "label": "Medieval-Factions/MfFactionChatChannel.kt:3-8",
+     "lines": "3-8",
+     "path": "src/main/kotlin/com/dansplugins/factionsystem/chat/MfFactionChatChannel.kt",
+     "ref": "3a51c55366b544d31429fae8bcb64efaf1878e15",
+     "repo": "Dans-Plugins/Medieval-Factions",
+     "shortRef": "3a51c55",
+     "url": "https://github.com/Dans-Plugins/Medieval-Factions/blob/3a51c55366b544d31429fae8bcb64efaf1878e15/src/main/kotlin/com/dansplugins/factionsystem/chat/MfFactionChatChannel.kt#L3-L8"
+    },
+    {
+     "claim": "A player's selected chat channel is a nullable field on the persisted player record, defaulting to null.",
+     "label": "Medieval-Factions/MfPlayer.kt:7-16",
+     "lines": "7-16",
+     "path": "src/main/kotlin/com/dansplugins/factionsystem/player/MfPlayer.kt",
+     "ref": "3a51c55366b544d31429fae8bcb64efaf1878e15",
+     "repo": "Dans-Plugins/Medieval-Factions",
+     "shortRef": "3a51c55",
+     "url": "https://github.com/Dans-Plugins/Medieval-Factions/blob/3a51c55366b544d31429fae8bcb64efaf1878e15/src/main/kotlin/com/dansplugins/factionsystem/player/MfPlayer.kt#L7-L16"
+    },
+    {
+     "claim": "Recipients are resolved per channel at send time — FACTION reaches the faction's own members, VASSALS walks to the top of the liege chain and reaches that faction's members plus every faction in its vassal tree, and ALLIES reaches own members plus allies whose reverse relationship is also ALLY.",
+     "label": "Medieval-Factions/MfChatService.kt:37-61",
+     "lines": "37-61",
+     "path": "src/main/kotlin/com/dansplugins/factionsystem/chat/MfChatService.kt",
+     "ref": "3a51c55366b544d31429fae8bcb64efaf1878e15",
+     "repo": "Dans-Plugins/Medieval-Factions",
+     "shortRef": "3a51c55",
+     "url": "https://github.com/Dans-Plugins/Medieval-Factions/blob/3a51c55366b544d31429fae8bcb64efaf1878e15/src/main/kotlin/com/dansplugins/factionsystem/chat/MfChatService.kt#L37-L61"
+    },
+    {
+     "claim": "The message is written to the repository on an asynchronous task after delivery, and echoed to the console sender so colour codes survive.",
+     "label": "Medieval-Factions/MfChatService.kt:62-71",
+     "lines": "62-71",
+     "path": "src/main/kotlin/com/dansplugins/factionsystem/chat/MfChatService.kt",
+     "ref": "3a51c55366b544d31429fae8bcb64efaf1878e15",
+     "repo": "Dans-Plugins/Medieval-Factions",
+     "shortRef": "3a51c55",
+     "url": "https://github.com/Dans-Plugins/Medieval-Factions/blob/3a51c55366b544d31429fae8bcb64efaf1878e15/src/main/kotlin/com/dansplugins/factionsystem/chat/MfChatService.kt#L62-L71"
+    },
+    {
+     "claim": "A stored chat message carries a timestamp, the sending player id, the faction id, the channel and the raw message text.",
+     "label": "Medieval-Factions/MfChatChannelMessage.kt:7-15",
+     "lines": "7-15",
+     "path": "src/main/kotlin/com/dansplugins/factionsystem/chat/MfChatChannelMessage.kt",
+     "ref": "3a51c55366b544d31429fae8bcb64efaf1878e15",
+     "repo": "Dans-Plugins/Medieval-Factions",
+     "shortRef": "3a51c55",
+     "url": "https://github.com/Dans-Plugins/Medieval-Factions/blob/3a51c55366b544d31429fae8bcb64efaf1878e15/src/main/kotlin/com/dansplugins/factionsystem/chat/MfChatChannelMessage.kt#L7-L15"
+    },
+    {
+     "claim": "Each of the three channels has its own configurable format string under the chat key.",
+     "label": "Medieval-Factions/config.yml:103-110",
+     "lines": "103-110",
+     "path": "src/main/resources/config.yml",
+     "ref": "3a51c55366b544d31429fae8bcb64efaf1878e15",
+     "repo": "Dans-Plugins/Medieval-Factions",
+     "shortRef": "3a51c55",
+     "url": "https://github.com/Dans-Plugins/Medieval-Factions/blob/3a51c55366b544d31429fae8bcb64efaf1878e15/src/main/resources/config.yml#L103-L110"
+    }
+   ],
+   "summary": "Three private channels whose audiences are computed from the diplomacy graph at send time rather than from a subscriber list.",
+   "tags": [
+    "medieval-factions",
+    "domain-model",
+    "chat"
+   ],
+   "text": "faction chat channel three private channels whose audiences are computed from the diplomacy graph at send time rather than from a subscriber list. \na player in a [[faction]] can direct their chat to one of three audiences:\n`faction`, `vassals`, or `allies`. the selection is a nullable field on the same\npersisted player record that carries [[player-power]] — `null` means ordinary\nserver chat — so the channel a player was last talking in is stored rather than\nheld for the session.\n\n## the audience is a query, not a list\n\nno channel has members. each is a rule evaluated against the diplomacy graph\nevery time someone speaks, which means the audience tracks\n[[faction-relationship]] changes with no subscription to maintain.\n\n- **`faction`** — the faction's own members.\n- **`vassals`** — not the speaker's direct vassals. the service walks the liege\n  chain to its **top** and addresses that faction's members plus every faction\n  in its vassal tree. realm-wide chat, reached from anywhere in the hierarchy;\n  see [[vassalage]].\n- **`allies`** — own members, plus the members of allies **whose alliance is\n  reciprocated**. an ally faction is included only if the reverse relationship\n  is also `ally`.\n\nthat last rule is worth noticing. [[faction-relationship]] stores directed\nedges, and the service checks the pairing for liege and vassal edges; here the\nsame suspicion is applied to alliance, at the call site, so a one-sided `ally`\nrow grants no access to allied chat.\n\n## written down, not read back\n\nafter delivery the message is persisted asynchronously as an\n`mfchatchannelmessage` — timestamp, sender, faction, channel, and text — keeping\nthe database write off the main thread, per [[main-thread-safety]]. the service\noffers paged reads and a count over a faction's history.\n\nat this commit **nothing outside the `chat` package calls those read methods.**\nthe log is written and retained; no comment, commit message or document in the\nrepository records what it is for.\n\n## formatting\n\neach channel has a configurable format string under `chat` in `config.yml`, with\nplaceholders for faction colour, name, role and message. one detail is worth\nflagging for anyone editing this code: the hard-coded fallback used when a\nformat key is missing selects its template from the *sending player's currently\nselected channel* rather than from the channel argument the method was called\nwith. the two normally agree. nothing in the repository explains the difference.\n",
+   "title": "Faction Chat Channel",
+   "type": "concept",
+   "updated": "2026-08-14"
   },
   "faction-events": {
    "backlinks": [
@@ -1015,6 +1332,7 @@
    "backlinks": [
     "approval-request",
     "faction",
+    "faction-chat-channel",
     "faction-flag",
     "faction-permission",
     "faction-power",
@@ -1140,6 +1458,7 @@
     "moc-dans-plugins-community",
     "moc-plugin-ecosystem",
     "ponder",
+    "simple-skills",
     "value-class-identifier"
    ],
    "body": "\nFiefs lets members of a [[faction]] carve out sub-factions — a fief has its own\nmembers, its own claimed chunks within the parent's territory, and its own\nflags. It is the feudal layer below the faction.\n\n## An older generation\n\nFiefs is Java, not Kotlin, and it is built on an earlier stack: it extends\n`PonderBukkitPlugin` from an older [[ponder]] API, keeps state in a\n`PersistentData` object with a `StorageService` writing files, and talks to the\nflagship through a hand-written `MedievalFactionsIntegrator`.\n\nIts `dependencies/` directory holds the jars it compiles against —\n`Medieval-Factions-4.6.2.jar` and `Ponder-v0.15-alpha-2.jar`. It therefore\ntargets **Medieval Factions 4**, not the version 5 described everywhere else in\nthis collection.\n\n## Why that matters\n\nThe integrator pattern is what a plugin does when the plugin it extends offers\nno typed API: reflectively or defensively fetch the other plugin, wrap it, and\ndegrade if it is missing. Compare [[currencies]], which simply imports\n`MfFactionId` and `MedievalFactions` because version 5 exposes them.\n\nReading the two together is the best available illustration of what the version\n5 rewrite bought — see [[expansion-plugin]].\n\n## Its own claim model\n\nFiefs has its own `ClaimedChunk` class, separate from the flagship's\n[[claimed-chunk]]. Two independent claim registries over the same ground is\ninherent to the sub-faction idea, but it does mean a chunk's ownership is a\nquestion with two answers depending on which plugin you ask.\n\n## Related\n\nFiefs is one of the two official expansions listed in the flagship's README, and\nships in the curated set on [[dpc-mc-server]].\n",
@@ -1188,13 +1507,96 @@
    "type": "concept",
    "updated": "2026-08-07"
   },
+  "food-spoilage": {
+   "backlinks": [
+    "moc-plugin-ecosystem",
+    "simple-skills"
+   ],
+   "body": "\nFood Spoilage gives every edible item an expiry date, and keeps that date on the\nitem. There is no table, no cache file and no repeating task: the expiry is a\nstring in the stack's persistent data container, mirrored into its lore, and it\ntravels with the stack through hoppers, chests, drops and restarts because\nMinecraft already persists item metadata.\n\n## Stamp on arrival, judge on use\n\nEleven listeners cover the ways food enters play — crafting, fishing, mob drops,\nitem spawns, pickups, joining, and opening or closing a container — and each one\nstamps anything edible that is not already stamped. Nothing sweeps inventories\nlooking for expired food. The check happens at the point of contact: interact\nwith a stack whose date has passed and it is replaced in your hand with rotten\nflesh and the interaction cancelled.\n\nBecause state lives on the item rather than in storage, the plugin needs nothing\nlike the [[repository-pattern]] the flagship uses. It does still read the older\nlore-only representation, the same \"keep reading the previous format\" instinct as\n[[legacy-data-migration]] at a much smaller scale — and that fallback is load\nbearing: the expiry is written with `ISO_OFFSET_DATE`, which carries no\ntime-of-day, so the same formatter cannot parse it back into an `OffsetDateTime`\nand the persistent-data read fails silently every time. I verified that round\ntrip against the JDK rather than finding it stated anywhere; no comment, commit\nor issue in the repository records whether it is intended.\n\n## The furnace is left alone\n\nThe one deliberate hole is cooking. `BlockCookListener` handles the event and\ndoes nothing, and its Javadoc records why: since Minecraft 1.20.5 the furnace\nre-runs `canBurn()` every tick, comparing the vanilla recipe result against the\noutput slot by strict data-component equality. A stamped output no longer\nmatches, so the furnace stops after one item. Leaving furnace output vanilla and\nstamping it later, when it reaches a player, is the workaround — and it is why\n`InventoryCloseListener` exists at all.\n\n## Related\n\nThe plugin extends `PonderBukkitPlugin` and registers its listeners through\n[[ponder]]'s `EventHandlerRegistry`. It ships in the curated jar set on\n[[dpc-mc-server]], and unlike an [[expansion-plugin]] it has no dependency on\n[[medieval-factions]] — its only optional integration is with RPKit's food\nlibrary, which it serves by registering itself as that library's expiry service.\n",
+   "id": "food-spoilage",
+   "links": [
+    "repository-pattern",
+    "legacy-data-migration",
+    "ponder",
+    "dpc-mc-server",
+    "expansion-plugin",
+    "medieval-factions"
+   ],
+   "moc": "moc-plugin-ecosystem",
+   "sourcePath": "notes/concepts/food-spoilage.md",
+   "sourceUrl": "https://github.com/Dans-Plugins/dpc-zettelkasten/blob/main/notes/concepts/food-spoilage.md",
+   "sources": [
+    {
+     "claim": "Stamping an item writes the expiry moment both into the item's PersistentDataContainer under the namespaced key \"expiry\" and into the item's lore, and writes nothing anywhere else.",
+     "label": "FoodSpoilage/LocalTimeStampService.java:39-60",
+     "lines": "39-60",
+     "path": "src/main/java/spoilagesystem/timestamp/LocalTimeStampService.java",
+     "ref": "f5fbff6bea0703194652af264a6fe94326e7b7f7",
+     "repo": "Dans-Plugins/FoodSpoilage",
+     "shortRef": "f5fbff6",
+     "url": "https://github.com/Dans-Plugins/FoodSpoilage/blob/f5fbff6bea0703194652af264a6fe94326e7b7f7/src/main/java/spoilagesystem/timestamp/LocalTimeStampService.java#L39-L60"
+    },
+    {
+     "claim": "onEnable registers eleven Bukkit listeners through Ponder's EventHandlerRegistry and starts no repeating or scheduled task.",
+     "label": "FoodSpoilage/FoodSpoilage.java:36-81",
+     "lines": "36-81",
+     "path": "src/main/java/spoilagesystem/FoodSpoilage.java",
+     "ref": "f5fbff6bea0703194652af264a6fe94326e7b7f7",
+     "repo": "Dans-Plugins/FoodSpoilage",
+     "shortRef": "f5fbff6",
+     "url": "https://github.com/Dans-Plugins/FoodSpoilage/blob/f5fbff6bea0703194652af264a6fe94326e7b7f7/src/main/java/spoilagesystem/FoodSpoilage.java#L36-L81"
+    },
+    {
+     "claim": "A stamped item is only turned into rotten flesh when a player interacts with it and its stored expiry has already passed, at which point the held stack is swapped and the interaction cancelled.",
+     "label": "FoodSpoilage/PlayerInteractListener.java:28-62",
+     "lines": "28-62",
+     "path": "src/main/java/spoilagesystem/listeners/PlayerInteractListener.java",
+     "ref": "f5fbff6bea0703194652af264a6fe94326e7b7f7",
+     "repo": "Dans-Plugins/FoodSpoilage",
+     "shortRef": "f5fbff6",
+     "url": "https://github.com/Dans-Plugins/FoodSpoilage/blob/f5fbff6bea0703194652af264a6fe94326e7b7f7/src/main/java/spoilagesystem/listeners/PlayerInteractListener.java#L28-L62"
+    },
+    {
+     "claim": "The BlockCookEvent handler is deliberately a no-op because stamping the furnace output with custom data makes Minecraft 1.20.5+'s canBurn() similarity check fail and stalls the furnace after one item.",
+     "label": "FoodSpoilage/BlockCookListener.java:12-34",
+     "lines": "12-34",
+     "path": "src/main/java/spoilagesystem/listeners/BlockCookListener.java",
+     "ref": "f5fbff6bea0703194652af264a6fe94326e7b7f7",
+     "repo": "Dans-Plugins/FoodSpoilage",
+     "shortRef": "f5fbff6",
+     "url": "https://github.com/Dans-Plugins/FoodSpoilage/blob/f5fbff6bea0703194652af264a6fe94326e7b7f7/src/main/java/spoilagesystem/listeners/BlockCookListener.java#L12-L34"
+    },
+    {
+     "claim": "Reading an expiry tries the persistent data container first and falls back to parsing the date back out of the item's lore, with the persistent-data parse failure swallowed under a comment saying logging it would spam the console on servers upgraded from pre-3.0.0.",
+     "label": "FoodSpoilage/LocalTimeStampService.java:121-166",
+     "lines": "121-166",
+     "path": "src/main/java/spoilagesystem/timestamp/LocalTimeStampService.java",
+     "ref": "f5fbff6bea0703194652af264a6fe94326e7b7f7",
+     "repo": "Dans-Plugins/FoodSpoilage",
+     "shortRef": "f5fbff6",
+     "url": "https://github.com/Dans-Plugins/FoodSpoilage/blob/f5fbff6bea0703194652af264a6fe94326e7b7f7/src/main/java/spoilagesystem/timestamp/LocalTimeStampService.java#L121-L166"
+    }
+   ],
+   "summary": "A standalone plugin that gives food an expiry date carried on the item stack itself, with no database and no repeating task — spoilage is evaluated the moment a player touches the item.",
+   "tags": [
+    "food-spoilage",
+    "ecosystem",
+    "persistence"
+   ],
+   "text": "food spoilage a standalone plugin that gives food an expiry date carried on the item stack itself, with no database and no repeating task — spoilage is evaluated the moment a player touches the item. \nfood spoilage gives every edible item an expiry date, and keeps that date on the\nitem. there is no table, no cache file and no repeating task: the expiry is a\nstring in the stack's persistent data container, mirrored into its lore, and it\ntravels with the stack through hoppers, chests, drops and restarts because\nminecraft already persists item metadata.\n\n## stamp on arrival, judge on use\n\neleven listeners cover the ways food enters play — crafting, fishing, mob drops,\nitem spawns, pickups, joining, and opening or closing a container — and each one\nstamps anything edible that is not already stamped. nothing sweeps inventories\nlooking for expired food. the check happens at the point of contact: interact\nwith a stack whose date has passed and it is replaced in your hand with rotten\nflesh and the interaction cancelled.\n\nbecause state lives on the item rather than in storage, the plugin needs nothing\nlike the [[repository-pattern]] the flagship uses. it does still read the older\nlore-only representation, the same \"keep reading the previous format\" instinct as\n[[legacy-data-migration]] at a much smaller scale — and that fallback is load\nbearing: the expiry is written with `iso_offset_date`, which carries no\ntime-of-day, so the same formatter cannot parse it back into an `offsetdatetime`\nand the persistent-data read fails silently every time. i verified that round\ntrip against the jdk rather than finding it stated anywhere; no comment, commit\nor issue in the repository records whether it is intended.\n\n## the furnace is left alone\n\nthe one deliberate hole is cooking. `blockcooklistener` handles the event and\ndoes nothing, and its javadoc records why: since minecraft 1.20.5 the furnace\nre-runs `canburn()` every tick, comparing the vanilla recipe result against the\noutput slot by strict data-component equality. a stamped output no longer\nmatches, so the furnace stops after one item. leaving furnace output vanilla and\nstamping it later, when it reaches a player, is the workaround — and it is why\n`inventorycloselistener` exists at all.\n\n## related\n\nthe plugin extends `ponderbukkitplugin` and registers its listeners through\n[[ponder]]'s `eventhandlerregistry`. it ships in the curated jar set on\n[[dpc-mc-server]], and unlike an [[expansion-plugin]] it has no dependency on\n[[medieval-factions]] — its only optional integration is with rpkit's food\nlibrary, which it serves by registering itself as that library's expiry service.\n",
+   "title": "Food Spoilage",
+   "type": "concept",
+   "updated": "2026-08-24"
+  },
   "gate": {
    "backlinks": [
     "main-thread-safety",
     "medieval-factions",
     "moc-dans-plugins-community",
     "moc-faction-domain-model",
-    "optimistic-locking"
+    "optimistic-locking",
+    "player-interaction-status",
+    "spatial-value-types"
    ],
    "body": "\nA gate is a rectangular region of blocks owned by a [[faction]] that fills and\nempties itself in response to redstone. It is the castle-drawbridge affordance:\na wall you can open without breaking it.\n\n## The record\n\n`MfGate` stores a cuboid `area`, a single `trigger` block position, the\n`material` to fill the area with, and a `status`. It does *not* store the blocks\nthemselves — the material plus the area is enough to reconstruct the wall.\n\n## Guarded against unloaded chunks\n\nBoth `shouldOpen()` and `shouldClose()` begin by resolving the trigger's world\nand checking `isChunkLoaded` before touching the block, returning `false` if\neither fails. This is the load-bearing detail: a gate whose trigger sits in an\nunloaded chunk must be treated as *unchanged*, not as unpowered. Reading a block\nin an unloaded chunk would force a synchronous chunk load on the server thread —\na stall on the main thread every tick, for every gate on the server.\n\nThe consequence players see is that a gate only responds while someone is nearby\nenough to keep its trigger loaded.\n\n## Four states, not two\n\n`MfGateStatus` is `OPEN`, `OPENING`, `CLOSED`, `CLOSING`. The transitional\nstates exist because a gate does not change in one tick — it is animated block\nby block, and a gate caught mid-open must not be told to open again.\n\nBecause the status is persisted rather than inferred from the blocks, the plugin\nknows what a gate believes it is after a restart, and after the area's blocks\nhave been altered by other means.\n\n## Related\n\nGates are one of the record types carried across by [[legacy-data-migration]],\nso the format predates the current database schema.\n",
    "id": "gate",
@@ -1240,11 +1642,14 @@
   },
   "jooq-persistence": {
    "backlinks": [
+    "alternate-account-finder",
     "legacy-data-migration",
     "medieval-factions",
     "moc-dans-plugins-community",
     "moc-plugin-architecture",
-    "repository-pattern"
+    "moc-plugin-ecosystem",
+    "repository-pattern",
+    "spatial-value-types"
    ],
    "body": "\n[[medieval-factions]] persists through jOOQ against a HikariCP connection pool,\nwith the schema managed by Flyway. All three are configured once in `onEnable`\nand never referenced again outside the `Jooq*Repository` classes.\n\n## The default is a file\n\nOut of the box the database is embedded H2 at `./medieval_factions_db`, with\nthree settings that matter:\n\n- `AUTO_SERVER=true` — H2 starts a TCP server beside the embedded database, so\n  an operator can query the live data with a SQL client while the Minecraft\n  server is running. This is what makes `DATABASE_QUERYING.md` possible.\n- `MODE=MYSQL` — H2 emulates MySQL, so SQL written for one mostly works on both.\n- `DATABASE_TO_UPPER=false` — identifiers stay lowercase and case-sensitive.\n\nA server that outgrows the file changes `database.url` and `database.dialect`\nand nothing else; the `SQLDialect` is read straight from config and handed to\njOOQ, which is what makes MySQL and PostgreSQL viable without touching code.\n\n## Flyway owns the schema\n\nMigrations live on the classpath under\n`com/dansplugins/factionsystem/db/migration`, with history in a dedicated\n`mf_schema_history` table. Two configuration choices are worth noting:\n`baselineOnMigrate(true)` with `baselineVersion(\"0\")` lets Flyway adopt a\ndatabase it did not create, and `validateOnMigrate(false)` tolerates checksum\ndrift rather than refusing to start.\n\nThe migration runs with the plugin's own classloader temporarily installed as\nthe thread context classloader, and the original restored afterwards. That dance\nis required because Flyway scans the classpath by reflection, and inside a\nBukkit server the thread context classloader is not the one holding the\nplugin's resources.\n\n## Related\n\nThe repositories built on this DSL are described in [[repository-pattern]], and\nthe version-column protocol they implement is [[optimistic-locking]].\n",
    "id": "jooq-persistence",
@@ -1353,6 +1758,7 @@
   },
   "legacy-data-migration": {
    "backlinks": [
+    "food-spoilage",
     "gate",
     "locked-block",
     "medieval-factions",
@@ -1404,10 +1810,14 @@
   },
   "locked-block": {
    "backlinks": [
+    "duel",
     "medieval-factions",
     "moc-dans-plugins-community",
     "moc-faction-domain-model",
-    "optimistic-locking"
+    "optimistic-locking",
+    "player-interaction-status",
+    "spatial-value-types",
+    "wild-pets"
    ],
    "body": "\nA lock protects one block — typically a chest or door — for one player, with an\nexplicit list of other players allowed to use it.\n\n## Owned by a player, not a faction\n\nThis is the notable thing about the design: a locked block belongs to an\n`MfPlayerId`, not an `MfFactionId`. Protection is personal and survives changes\nof faction. A member can secure their own chest inside their faction's\n[[claimed-chunk|claim]] against their own faction-mates, and keep it when they\nleave.\n\nLand ownership and container ownership are therefore two independent protection\nsystems that both run on every block interaction. [[faction-permission]] governs\nthe first; the accessor list governs the second.\n\n## Chunk coordinates are denormalised\n\nThe record stores `chunkX` and `chunkZ` alongside the full block position, even\nthough both are derivable from it by integer division. This is an index: the\ncommon query is \"which locks exist in this chunk?\", asked whenever a chunk's\nownership changes or a player interacts within it. Storing the chunk lets that\nbe a lookup rather than a scan over every lock in the world.\n\n## Typed unlock result\n\n`MfUnlockResult` gives unlocking a typed outcome — `SUCCESS`, `NOT_LOCKED`, or\n`FAILURE` — so a caller can tell \"there was nothing to unlock\" apart from \"the\nunlock was refused\" and produce the right message for each. Compare the broader\n[[service-layer]] failure model, which reaches for `Result4k` to make the same\ndistinction.\n\n## Related\n\nLocks are among the records carried over by [[legacy-data-migration]].\n",
    "id": "locked-block",
@@ -1455,7 +1865,9 @@
   },
   "mailboxes": {
    "backlinks": [
+    "alternate-account-finder",
     "dpc-mc-server",
+    "medieval-roleplay-engine",
     "moc-dans-plugins-community",
     "moc-plugin-ecosystem",
     "notification"
@@ -1505,10 +1917,15 @@
   },
   "main-thread-safety": {
    "backlinks": [
+    "alternate-account-finder",
     "dpc-api-faction-sync",
+    "faction-chat-channel",
     "faction-events",
+    "medieval-roleplay-engine",
     "moc-dans-plugins-community",
-    "moc-plugin-architecture"
+    "moc-plugin-architecture",
+    "player-interaction-status",
+    "spatial-value-types"
    ],
    "body": "\nA Bukkit server runs game logic on one thread. Plugin data structures reachable\nfrom that logic are not thread-safe, and reading them from a background thread\nproduces corruption that surfaces far from its cause.\n\n## Snapshot on, send off\n\n[[dpc-api-faction-sync]] is the clearest worked example in the codebase, and its\nclass comment states the rule outright. The work is split in two:\n\n1. **`collectSnapshot()`** — runs on the main thread. It walks the faction\n   service and the members lists, and returns an immutable `SyncSnapshot`.\n2. **`dispatchAsync()`** — safe from any thread. It serializes the snapshot and\n   hands it to the JDK `HttpClient`, which does the I/O on its own pool.\n\nThe scheduled task is therefore registered with `runTaskTimer` — the *main\nthread* variant — even though its purpose is a network call. This looks backwards\nuntil you see the split: the expensive part is already asynchronous inside\n`HttpClient`, and scheduling the task asynchronously would only move the *unsafe*\npart off the main thread.\n\n## The general rule\n\nThe pattern generalises to anything the plugin does off-thread: **collect an\nimmutable snapshot on the main thread, then act on the snapshot elsewhere.**\nNever hold a reference to live Bukkit or service state across a thread boundary.\n\n## Where it also shows up\n\n- [[faction-events]] pass `!server.isPrimaryThread` to the Bukkit `Event`\n  constructor, so listeners are told truthfully which thread they are on.\n- [[gate]] checks `isChunkLoaded` before reading a block, avoiding a synchronous\n  chunk load on the main thread.\n- The [[service-layer]] caches use `ConcurrentHashMap` and\n  `CopyOnWriteArrayList`, because reads can legitimately arrive from async\n  listeners even when writes do not.\n\n## Related\n\nGetting this wrong is not usually a crash — it is a rare, unreproducible\ninconsistency. That is why the constraint is written into a class comment rather\nthan left implicit.\n",
    "id": "main-thread-safety",
@@ -1627,9 +2044,12 @@
     "dpc-api-faction-sync",
     "dpc-conventions",
     "dpc-mc-server",
+    "duel",
     "faction-events",
+    "food-spoilage",
     "jooq-persistence",
     "mailboxes",
+    "medieval-roleplay-engine",
     "moc-conventions-and-process",
     "moc-dans-plugins-community",
     "moc-medieval-factions",
@@ -1641,6 +2061,7 @@
     "release-automation",
     "repository-pattern",
     "service-layer",
+    "simple-skills",
     "two-tier-documentation"
    ],
    "body": "\nMedieval Factions is a Spigot plugin written in Kotlin that lets players\norganise into feudal nations. It is the largest repository in the organization\nand the most heavily documented, and [[dpc-conventions]] names it as the\nreference implementation the other plugins are measured against.\n\n## What it simulates\n\nPlayers form a [[faction]], gain [[player-power]] by playing, and spend that\npower's collective total on territory via the [[demesne-limit]]. Around that core\nsit diplomacy ([[faction-relationship]], [[vassalage]]), internal governance\n([[faction-role]], [[faction-permission]], [[faction-flag]]), and a set of\nprops for roleplay ([[law]], [[gate]], [[locked-block]], duels).\n\nThe design bet running through all of it: give players the mechanics of\nsovereignty and let the politics be emergent. See [[law]] for the clearest\nstatement of that principle — the plugin stores a faction's laws and refuses to\nenforce them.\n\n## Version 5 was a rewrite\n\nVersion 4 was Java with flat-file JSON storage. Version 5 is Kotlin over a real\ndatabase, and its development was led by [alyphen](https://github.com/alyphen),\ncreator of RPKit. The architecture described in [[moc-plugin-architecture]] —\nservices over repositories over [[jooq-persistence]], immutable data classes,\n[[optimistic-locking]] — arrived with that rewrite.\n\nThe seam between the two generations is still visible: [[legacy-data-migration]]\nexists to carry version 4 servers across, and [[fiefs]] still builds against a\nversion 4 jar.\n\n## Integration surface\n\nOther software attaches at four points: [[faction-events]] (react),\n[[service-layer]] (read and write), [[notification]] and [[map-integration]]\n(supply an implementation), and [[dpc-api-faction-sync]] (push data out).\n\n## Related\n\nIts documentation lives beside the code per [[two-tier-documentation]]:\n`USER_GUIDE.md`, `COMMANDS.md`, `CONFIG.md`, `FACTION_FLAGS.md`, and\n`DATABASE_QUERYING.md`.\n",
@@ -1706,17 +2127,96 @@
    "type": "concept",
    "updated": "2026-08-07"
   },
+  "medieval-roleplay-engine": {
+   "backlinks": [
+    "moc-plugin-ecosystem"
+   ],
+   "body": "\nSpeech here has a physical range. Where [[faction-chat-channel]] resolves an\naudience from the diplomacy graph, this plugin resolves one from geometry: an\nutterance reaches the players standing near enough to hear it, and the speech\n\"modes\" differ only in how far that is.\n\n## One delivery routine, four radii\n\n`deliverMessageToNearbyPlayers` is the whole mechanism. It walks the online\nplayers, drops anyone in another world, drops anyone whose distance from the\nspeaker is not strictly less than the radius, drops anyone who has hidden that\nchannel, and sends. Everything above it is a caller picking a number and a\ncolour: whisper 2 blocks, local chat and emotes 25, yelling 50 — four separate\nconfig integers, so an operator tunes how far a voice carries.\n\nA character card supplies the name, so a line is attributed to the character\nrather than to the Minecraft account.\n\n## Local chat is a mode, not a command\n\n`/local` puts a UUID into an in-memory set. While it is there the chat listener\ncancels the vanilla chat event and re-broadcasts the message at\n`localChatRadius`; text between asterisks is split out and sent separately at\n`emoteRadius`, so `*draws his sword* Stand back!` becomes an action and a line\nof dialogue with independently configurable reach.\n\n`/global` is the mirror image, and the most revealing line in the plugin: it\ntakes the UUID back out of the set and does nothing else. Global chat is not a\nchannel this plugin delivers — it is what happens when the plugin declines to\nintercept.\n\n## One channel to mute\n\nAll roleplay output shares a single mute flag. The user guide states plainly\nthat hiding local chat withholds whispers, yells, emotes, dice results and bird\nnotices as well, and that a hidden player cannot speak in local chat. Why the\nmute is that coarse is not recorded.\n\n## Related\n\nThe plugin soft-depends on [[medieval-factions]] and [[mailboxes]], running\nalongside the flagship without requiring it. One observation offered as\nreasoning, not as anything the source claims: the distance walk runs inside an\n`AsyncPlayerChatEvent` handler and reads live player locations there, which is\nthe opposite of the snapshot discipline [[main-thread-safety]] describes. No\ncomment or commit in the repository addresses that.\n",
+   "id": "medieval-roleplay-engine",
+   "links": [
+    "faction-chat-channel",
+    "medieval-factions",
+    "mailboxes",
+    "main-thread-safety"
+   ],
+   "moc": "moc-plugin-ecosystem",
+   "sourcePath": "notes/concepts/medieval-roleplay-engine.md",
+   "sourceUrl": "https://github.com/Dans-Plugins/dpc-zettelkasten/blob/main/notes/concepts/medieval-roleplay-engine.md",
+   "sources": [
+    {
+     "claim": "All roleplay chat is delivered by one routine that iterates the online players and sends only to those in the same world whose distance from the speaker is strictly less than the given radius and who have not hidden that channel.",
+     "label": "Medieval-Roleplay-Engine/Messenger.java:53-81",
+     "lines": "53-81",
+     "path": "src/main/java/dansplugins/rpsystem/utils/Messenger.java",
+     "ref": "283dfca2c786b76bf3259a474daa6d5378b13d07",
+     "repo": "Dans-Plugins/Medieval-Roleplay-Engine",
+     "shortRef": "283dfca",
+     "url": "https://github.com/Dans-Plugins/Medieval-Roleplay-Engine/blob/283dfca2c786b76bf3259a474daa6d5378b13d07/src/main/java/dansplugins/rpsystem/utils/Messenger.java#L53-L81"
+    },
+    {
+     "claim": "The speech ranges are four independent integer config options defaulting to 2 blocks for whisper, 25 for local chat, 25 for emotes and 50 for yelling.",
+     "label": "Medieval-Roleplay-Engine/ConfigService.java:24-35",
+     "lines": "24-35",
+     "path": "src/main/java/dansplugins/rpsystem/config/ConfigService.java",
+     "ref": "283dfca2c786b76bf3259a474daa6d5378b13d07",
+     "repo": "Dans-Plugins/Medieval-Roleplay-Engine",
+     "shortRef": "283dfca",
+     "url": "https://github.com/Dans-Plugins/Medieval-Roleplay-Engine/blob/283dfca2c786b76bf3259a474daa6d5378b13d07/src/main/java/dansplugins/rpsystem/config/ConfigService.java#L24-L35"
+    },
+    {
+     "claim": "While a player is in local chat the plugin cancels the AsyncPlayerChatEvent and re-sends the message under the character card's name, splitting any text between asterisks into a separate emote delivered at emoteRadius instead of localChatRadius.",
+     "label": "Medieval-Roleplay-Engine/ChatListener.java:25-59",
+     "lines": "25-59",
+     "path": "src/main/java/dansplugins/rpsystem/listeners/ChatListener.java",
+     "ref": "283dfca2c786b76bf3259a474daa6d5378b13d07",
+     "repo": "Dans-Plugins/Medieval-Roleplay-Engine",
+     "shortRef": "283dfca",
+     "url": "https://github.com/Dans-Plugins/Medieval-Roleplay-Engine/blob/283dfca2c786b76bf3259a474daa6d5378b13d07/src/main/java/dansplugins/rpsystem/listeners/ChatListener.java#L25-L59"
+    },
+    {
+     "claim": "The /global command only removes the player's UUID from the local-chat set — it delivers no message of its own, so global chat is ordinary uncancelled server chat.",
+     "label": "Medieval-Roleplay-Engine/GlobalChatCommand.java:27-41",
+     "lines": "27-41",
+     "path": "src/main/java/dansplugins/rpsystem/commands/global/GlobalChatCommand.java",
+     "ref": "283dfca2c786b76bf3259a474daa6d5378b13d07",
+     "repo": "Dans-Plugins/Medieval-Roleplay-Engine",
+     "shortRef": "283dfca",
+     "url": "https://github.com/Dans-Plugins/Medieval-Roleplay-Engine/blob/283dfca2c786b76bf3259a474daa6d5378b13d07/src/main/java/dansplugins/rpsystem/commands/global/GlobalChatCommand.java#L27-L41"
+    },
+    {
+     "claim": "Hiding local chat withholds the entire roleplay channel — whispers, yells, emotes, dice results and bird landing notices — and a hidden player cannot talk in local chat either.",
+     "label": "Medieval-Roleplay-Engine/USER_GUIDE.md:47-49",
+     "lines": "47-49",
+     "path": "USER_GUIDE.md",
+     "ref": "283dfca2c786b76bf3259a474daa6d5378b13d07",
+     "repo": "Dans-Plugins/Medieval-Roleplay-Engine",
+     "shortRef": "283dfca",
+     "url": "https://github.com/Dans-Plugins/Medieval-Roleplay-Engine/blob/283dfca2c786b76bf3259a474daa6d5378b13d07/USER_GUIDE.md#L47-L49"
+    }
+   ],
+   "summary": "A roleplay plugin whose chat audience is computed from distance in blocks rather than from channel membership — whisper, local, emote and yell differ only by radius.",
+   "tags": [
+    "medieval-roleplay-engine",
+    "ecosystem",
+    "chat"
+   ],
+   "text": "medieval roleplay engine a roleplay plugin whose chat audience is computed from distance in blocks rather than from channel membership — whisper, local, emote and yell differ only by radius. \nspeech here has a physical range. where [[faction-chat-channel]] resolves an\naudience from the diplomacy graph, this plugin resolves one from geometry: an\nutterance reaches the players standing near enough to hear it, and the speech\n\"modes\" differ only in how far that is.\n\n## one delivery routine, four radii\n\n`delivermessagetonearbyplayers` is the whole mechanism. it walks the online\nplayers, drops anyone in another world, drops anyone whose distance from the\nspeaker is not strictly less than the radius, drops anyone who has hidden that\nchannel, and sends. everything above it is a caller picking a number and a\ncolour: whisper 2 blocks, local chat and emotes 25, yelling 50 — four separate\nconfig integers, so an operator tunes how far a voice carries.\n\na character card supplies the name, so a line is attributed to the character\nrather than to the minecraft account.\n\n## local chat is a mode, not a command\n\n`/local` puts a uuid into an in-memory set. while it is there the chat listener\ncancels the vanilla chat event and re-broadcasts the message at\n`localchatradius`; text between asterisks is split out and sent separately at\n`emoteradius`, so `*draws his sword* stand back!` becomes an action and a line\nof dialogue with independently configurable reach.\n\n`/global` is the mirror image, and the most revealing line in the plugin: it\ntakes the uuid back out of the set and does nothing else. global chat is not a\nchannel this plugin delivers — it is what happens when the plugin declines to\nintercept.\n\n## one channel to mute\n\nall roleplay output shares a single mute flag. the user guide states plainly\nthat hiding local chat withholds whispers, yells, emotes, dice results and bird\nnotices as well, and that a hidden player cannot speak in local chat. why the\nmute is that coarse is not recorded.\n\n## related\n\nthe plugin soft-depends on [[medieval-factions]] and [[mailboxes]], running\nalongside the flagship without requiring it. one observation offered as\nreasoning, not as anything the source claims: the distance walk runs inside an\n`asyncplayerchatevent` handler and reads live player locations there, which is\nthe opposite of the snapshot discipline [[main-thread-safety]] describes. no\ncomment or commit in the repository addresses that.\n",
+   "title": "Medieval Roleplay Engine",
+   "type": "concept",
+   "updated": "2026-08-24"
+  },
   "moc-conventions-and-process": {
    "backlinks": [
     "moc-dans-plugins-community"
    ],
-   "body": "\nThe organization writes its standards down. [[dpc-conventions]] is the repository\nthat holds them, and [[medieval-factions]] is the worked example most of those\ndocuments point back at.\n\n## The documents\n\n- [[two-tier-documentation]] — which docs live in the repo and which live in the\n  wiki, and why the split exists.\n- [[release-automation]] — a release triggers a build that attaches a JAR.\n- [[testing-and-ci]] — Gradle for unit tests, Docker Compose for a real server.\n\n## The shape of a repository\n\nA repository that follows the conventions has, in its root: `README.md`,\n`CONTRIBUTING.md`, `USER_GUIDE.md`, `COMMANDS.md`, `CONFIG.md`, usually\n`CHANGELOG.md`, and a `.github/copilot-instructions.md` giving coding agents\ncontext about the plugin. The presence or absence of those files is the quickest\naudit of whether a repository has been brought into line.\n\n## Why it is centralised\n\nStandards written into one repository can be cited. A note in this zettelkasten\nthat says \"DPC plugins document their commands in `COMMANDS.md`\" is a claim, and\nit needs a source — [[dpc-conventions]] is that source. Standards held only in\na maintainer's head cannot be cited, verified, or handed to a new contributor.\n",
+   "body": "\nThe organization writes its standards down. [[dpc-conventions]] is the repository\nthat holds them, and [[medieval-factions]] is the worked example most of those\ndocuments point back at.\n\n## The documents\n\n- [[two-tier-documentation]] — which docs live in the repo and which live in the\n  wiki, and why the split exists.\n- [[release-automation]] — a release triggers a build that attaches a JAR.\n- [[release-channel]] — whether a server gets published releases or a rolling\n  build of `main`, chosen per plugin.\n- [[testing-and-ci]] — Gradle for unit tests, Docker Compose for a real server.\n\n## The shape of a repository\n\nA repository that follows the conventions has, in its root: `README.md`,\n`CONTRIBUTING.md`, `USER_GUIDE.md`, `COMMANDS.md`, `CONFIG.md`, usually\n`CHANGELOG.md`, and a `.github/copilot-instructions.md` giving coding agents\ncontext about the plugin. The presence or absence of those files is the quickest\naudit of whether a repository has been brought into line.\n\n## Why it is centralised\n\nStandards written into one repository can be cited. A note in this zettelkasten\nthat says \"DPC plugins document their commands in `COMMANDS.md`\" is a claim, and\nit needs a source — [[dpc-conventions]] is that source. Standards held only in\na maintainer's head cannot be cited, verified, or handed to a new contributor.\n",
    "id": "moc-conventions-and-process",
    "links": [
     "dpc-conventions",
     "medieval-factions",
     "two-tier-documentation",
     "release-automation",
+    "release-channel",
     "testing-and-ci"
    ],
    "moc": "",
@@ -1740,7 +2240,7 @@
     "dpc",
     "conventions"
    ],
-   "text": "conventions and process the standards every dpc repository is held to — documentation layout, testing, ci, and release automation. \nthe organization writes its standards down. [[dpc-conventions]] is the repository\nthat holds them, and [[medieval-factions]] is the worked example most of those\ndocuments point back at.\n\n## the documents\n\n- [[two-tier-documentation]] — which docs live in the repo and which live in the\n  wiki, and why the split exists.\n- [[release-automation]] — a release triggers a build that attaches a jar.\n- [[testing-and-ci]] — gradle for unit tests, docker compose for a real server.\n\n## the shape of a repository\n\na repository that follows the conventions has, in its root: `readme.md`,\n`contributing.md`, `user_guide.md`, `commands.md`, `config.md`, usually\n`changelog.md`, and a `.github/copilot-instructions.md` giving coding agents\ncontext about the plugin. the presence or absence of those files is the quickest\naudit of whether a repository has been brought into line.\n\n## why it is centralised\n\nstandards written into one repository can be cited. a note in this zettelkasten\nthat says \"dpc plugins document their commands in `commands.md`\" is a claim, and\nit needs a source — [[dpc-conventions]] is that source. standards held only in\na maintainer's head cannot be cited, verified, or handed to a new contributor.\n",
+   "text": "conventions and process the standards every dpc repository is held to — documentation layout, testing, ci, and release automation. \nthe organization writes its standards down. [[dpc-conventions]] is the repository\nthat holds them, and [[medieval-factions]] is the worked example most of those\ndocuments point back at.\n\n## the documents\n\n- [[two-tier-documentation]] — which docs live in the repo and which live in the\n  wiki, and why the split exists.\n- [[release-automation]] — a release triggers a build that attaches a jar.\n- [[release-channel]] — whether a server gets published releases or a rolling\n  build of `main`, chosen per plugin.\n- [[testing-and-ci]] — gradle for unit tests, docker compose for a real server.\n\n## the shape of a repository\n\na repository that follows the conventions has, in its root: `readme.md`,\n`contributing.md`, `user_guide.md`, `commands.md`, `config.md`, usually\n`changelog.md`, and a `.github/copilot-instructions.md` giving coding agents\ncontext about the plugin. the presence or absence of those files is the quickest\naudit of whether a repository has been brought into line.\n\n## why it is centralised\n\nstandards written into one repository can be cited. a note in this zettelkasten\nthat says \"dpc plugins document their commands in `commands.md`\" is a claim, and\nit needs a source — [[dpc-conventions]] is that source. standards held only in\na maintainer's head cannot be cited, verified, or handed to a new contributor.\n",
    "title": "Conventions and Process",
    "type": "moc",
    "updated": "2026-08-07"
@@ -1749,7 +2249,7 @@
    "backlinks": [
     "moc-medieval-factions"
    ],
-   "body": "\nDan's Plugins Community (DPC) is a collection of open-source Minecraft plugins\nbuilt around a single ambition: let players simulate societies.\n[[medieval-factions]] is the flagship — sovereign nations, claimed land,\ndiplomacy, war — and most other repositories in the organization either extend\nit, support it, or share its conventions.\n\n**This is a map of maps.** It holds no claims of its own. Every concept note in\nthe collection lives under exactly one of the maps below, and each map is a\ncurated route through its cluster rather than an alphabetical dump.\n\n---\n\n## [[moc-medieval-factions|The flagship]]\n\nThe largest repository in the organization, and the reference implementation\nevery convention points back at. It is big enough to need two maps of its own:\n\n### → [[moc-faction-domain-model]] — the nouns of the simulation\n\nWhat the game is *about*. Almost all of it hangs off one number.\n\n- **The currency of the whole game** — [[player-power]] · [[faction-power]] ·\n  [[demesne-limit]]\n- **The state** — [[faction]] · [[claimed-chunk]]\n- **Politics** — [[faction-relationship]] · [[vassalage]] ·\n  [[approval-request]]\n- **Internal governance** — [[faction-role]] · [[faction-permission]] ·\n  [[faction-flag]]\n- **Props for roleplay** — [[law]] · [[gate]] · [[locked-block]]\n\n*Start with [[demesne-limit]]. It is one inequality, and the rest of the\nsimulation is arranged around it.*\n\n### → [[moc-plugin-architecture]] — how it is built\n\nThe shape every feature in the codebase takes.\n\n- **The three layers** — [[service-layer]] · [[repository-pattern]] ·\n  [[jooq-persistence]]\n- **Cross-cutting concerns** — [[optimistic-locking]] ·\n  [[value-class-identifier]] · [[main-thread-safety]]\n- **Seams other software attaches to** — [[faction-events]] ·\n  [[notification]] · [[map-integration]]\n- **History still in the tree** — [[legacy-data-migration]]\n\n*Start with [[service-layer]]. Once you have seen one feature you have seen\nthem all.*\n\n---\n\n## → [[moc-plugin-ecosystem]] — the other plugins\n\nWhat surrounds the flagship: the shared library, the official expansions, and\nthe plugins it talks to at runtime.\n\n- **The library** — [[ponder]]\n- **Expansions** — [[expansion-plugin]] · [[fiefs]] · [[currencies]]\n- **Runtime neighbours** — [[mailboxes]]\n- **Distribution** — [[dans-plugin-manager]]\n\n---\n\n## → [[moc-conventions-and-process]] — the standards\n\nWhat every repository in the organization is held to.\n\n- [[dpc-conventions]] · [[two-tier-documentation]] · [[release-automation]] ·\n  [[testing-and-ci]]\n\n---\n\n## → [[moc-web-and-infrastructure]] — outside Minecraft\n\nThe public site, the containerised server, and the pipe between them.\n\n- [[dansplugins-dot-com]] · [[dpc-mc-server]] · [[dpc-api-faction-sync]]\n\n---\n\n## How to read this collection\n\n**If you have never touched the codebase**, read [[medieval-factions]], then\n[[faction]], then [[faction-power]]. Those three carry most of the vocabulary\neverything else assumes.\n\n**If you are here to change code**, go straight to [[moc-plugin-architecture]].\n\n**If you are here to check something**, every concept note carries citations to\na Dans-Plugins repository pinned at a commit SHA. Open the source panel and\nfollow the link — the claim is meant to be falsifiable by reading the code it\npoints at. See [the note format](../../docs/NOTE_FORMAT.md) for the rules.\n",
+   "body": "\nDan's Plugins Community (DPC) is a collection of open-source Minecraft plugins\nbuilt around a single ambition: let players simulate societies.\n[[medieval-factions]] is the flagship — sovereign nations, claimed land,\ndiplomacy, war — and most other repositories in the organization either extend\nit, support it, or share its conventions.\n\n**This is a map of maps.** It holds no claims of its own. Every concept note in\nthe collection lives under exactly one of the maps below, and each map is a\ncurated route through its cluster rather than an alphabetical dump.\n\n---\n\n## [[moc-medieval-factions|The flagship]]\n\nThe largest repository in the organization, and the reference implementation\nevery convention points back at. It is big enough to need two maps of its own:\n\n### → [[moc-faction-domain-model]] — the nouns of the simulation\n\nWhat the game is *about*. Almost all of it hangs off one number.\n\n- **The currency of the whole game** — [[player-power]] · [[faction-power]] ·\n  [[demesne-limit]]\n- **The state** — [[faction]] · [[claimed-chunk]]\n- **Politics** — [[faction-relationship]] · [[vassalage]] ·\n  [[approval-request]]\n- **Internal governance** — [[faction-role]] · [[faction-permission]] ·\n  [[faction-flag]]\n- **Props for roleplay** — [[law]] · [[gate]] · [[locked-block]]\n- **Player to player** — [[faction-chat-channel]] · [[duel]]\n\n*Start with [[demesne-limit]]. It is one inequality, and the rest of the\nsimulation is arranged around it.*\n\n### → [[moc-plugin-architecture]] — how it is built\n\nThe shape every feature in the codebase takes.\n\n- **The three layers** — [[service-layer]] · [[repository-pattern]] ·\n  [[jooq-persistence]]\n- **Cross-cutting concerns** — [[optimistic-locking]] ·\n  [[value-class-identifier]] · [[main-thread-safety]] · [[spatial-value-types]]\n- **Input** — [[player-interaction-status]]\n- **Seams other software attaches to** — [[faction-events]] ·\n  [[notification]] · [[map-integration]]\n- **History still in the tree** — [[legacy-data-migration]]\n\n*Start with [[service-layer]]. Once you have seen one feature you have seen\nthem all.*\n\n---\n\n## → [[moc-plugin-ecosystem]] — the other plugins\n\nWhat surrounds the flagship: the shared library, the official expansions, and\nthe plugins it talks to at runtime.\n\n- **The library** — [[ponder]]\n- **Expansions** — [[expansion-plugin]] · [[fiefs]] · [[currencies]]\n- **Runtime neighbours** — [[mailboxes]]\n- **Distribution** — [[dans-plugin-manager]]\n\n---\n\n## → [[moc-conventions-and-process]] — the standards\n\nWhat every repository in the organization is held to.\n\n- [[dpc-conventions]] · [[two-tier-documentation]] · [[release-automation]] ·\n  [[testing-and-ci]]\n\n---\n\n## → [[moc-web-and-infrastructure]] — outside Minecraft\n\nThe public site, the containerised server, and the pipe between them.\n\n- [[dansplugins-dot-com]] · [[dpc-mc-server]] · [[dpc-api-faction-sync]]\n\n---\n\n## How to read this collection\n\n**If you have never touched the codebase**, read [[medieval-factions]], then\n[[faction]], then [[faction-power]]. Those three carry most of the vocabulary\neverything else assumes.\n\n**If you are here to change code**, go straight to [[moc-plugin-architecture]].\n\n**If you are here to check something**, every concept note carries citations to\na Dans-Plugins repository pinned at a commit SHA. Open the source panel and\nfollow the link — the claim is meant to be falsifiable by reading the code it\npoints at. See [the note format](../../docs/NOTE_FORMAT.md) for the rules.\n",
    "id": "moc-dans-plugins-community",
    "links": [
     "medieval-factions",
@@ -1769,6 +2269,8 @@
     "law",
     "gate",
     "locked-block",
+    "faction-chat-channel",
+    "duel",
     "moc-plugin-architecture",
     "service-layer",
     "repository-pattern",
@@ -1776,6 +2278,8 @@
     "optimistic-locking",
     "value-class-identifier",
     "main-thread-safety",
+    "spatial-value-types",
+    "player-interaction-status",
     "faction-events",
     "notification",
     "map-integration",
@@ -1818,7 +2322,7 @@
     "dpc",
     "index"
    ],
-   "text": "dan's plugins community the root map — an index of the six maps of content, and through them every concept note in the collection. \ndan's plugins community (dpc) is a collection of open-source minecraft plugins\nbuilt around a single ambition: let players simulate societies.\n[[medieval-factions]] is the flagship — sovereign nations, claimed land,\ndiplomacy, war — and most other repositories in the organization either extend\nit, support it, or share its conventions.\n\n**this is a map of maps.** it holds no claims of its own. every concept note in\nthe collection lives under exactly one of the maps below, and each map is a\ncurated route through its cluster rather than an alphabetical dump.\n\n---\n\n## [[moc-medieval-factions|the flagship]]\n\nthe largest repository in the organization, and the reference implementation\nevery convention points back at. it is big enough to need two maps of its own:\n\n### → [[moc-faction-domain-model]] — the nouns of the simulation\n\nwhat the game is *about*. almost all of it hangs off one number.\n\n- **the currency of the whole game** — [[player-power]] · [[faction-power]] ·\n  [[demesne-limit]]\n- **the state** — [[faction]] · [[claimed-chunk]]\n- **politics** — [[faction-relationship]] · [[vassalage]] ·\n  [[approval-request]]\n- **internal governance** — [[faction-role]] · [[faction-permission]] ·\n  [[faction-flag]]\n- **props for roleplay** — [[law]] · [[gate]] · [[locked-block]]\n\n*start with [[demesne-limit]]. it is one inequality, and the rest of the\nsimulation is arranged around it.*\n\n### → [[moc-plugin-architecture]] — how it is built\n\nthe shape every feature in the codebase takes.\n\n- **the three layers** — [[service-layer]] · [[repository-pattern]] ·\n  [[jooq-persistence]]\n- **cross-cutting concerns** — [[optimistic-locking]] ·\n  [[value-class-identifier]] · [[main-thread-safety]]\n- **seams other software attaches to** — [[faction-events]] ·\n  [[notification]] · [[map-integration]]\n- **history still in the tree** — [[legacy-data-migration]]\n\n*start with [[service-layer]]. once you have seen one feature you have seen\nthem all.*\n\n---\n\n## → [[moc-plugin-ecosystem]] — the other plugins\n\nwhat surrounds the flagship: the shared library, the official expansions, and\nthe plugins it talks to at runtime.\n\n- **the library** — [[ponder]]\n- **expansions** — [[expansion-plugin]] · [[fiefs]] · [[currencies]]\n- **runtime neighbours** — [[mailboxes]]\n- **distribution** — [[dans-plugin-manager]]\n\n---\n\n## → [[moc-conventions-and-process]] — the standards\n\nwhat every repository in the organization is held to.\n\n- [[dpc-conventions]] · [[two-tier-documentation]] · [[release-automation]] ·\n  [[testing-and-ci]]\n\n---\n\n## → [[moc-web-and-infrastructure]] — outside minecraft\n\nthe public site, the containerised server, and the pipe between them.\n\n- [[dansplugins-dot-com]] · [[dpc-mc-server]] · [[dpc-api-faction-sync]]\n\n---\n\n## how to read this collection\n\n**if you have never touched the codebase**, read [[medieval-factions]], then\n[[faction]], then [[faction-power]]. those three carry most of the vocabulary\neverything else assumes.\n\n**if you are here to change code**, go straight to [[moc-plugin-architecture]].\n\n**if you are here to check something**, every concept note carries citations to\na dans-plugins repository pinned at a commit sha. open the source panel and\nfollow the link — the claim is meant to be falsifiable by reading the code it\npoints at. see [the note format](../../docs/note_format.md) for the rules.\n",
+   "text": "dan's plugins community the root map — an index of the six maps of content, and through them every concept note in the collection. \ndan's plugins community (dpc) is a collection of open-source minecraft plugins\nbuilt around a single ambition: let players simulate societies.\n[[medieval-factions]] is the flagship — sovereign nations, claimed land,\ndiplomacy, war — and most other repositories in the organization either extend\nit, support it, or share its conventions.\n\n**this is a map of maps.** it holds no claims of its own. every concept note in\nthe collection lives under exactly one of the maps below, and each map is a\ncurated route through its cluster rather than an alphabetical dump.\n\n---\n\n## [[moc-medieval-factions|the flagship]]\n\nthe largest repository in the organization, and the reference implementation\nevery convention points back at. it is big enough to need two maps of its own:\n\n### → [[moc-faction-domain-model]] — the nouns of the simulation\n\nwhat the game is *about*. almost all of it hangs off one number.\n\n- **the currency of the whole game** — [[player-power]] · [[faction-power]] ·\n  [[demesne-limit]]\n- **the state** — [[faction]] · [[claimed-chunk]]\n- **politics** — [[faction-relationship]] · [[vassalage]] ·\n  [[approval-request]]\n- **internal governance** — [[faction-role]] · [[faction-permission]] ·\n  [[faction-flag]]\n- **props for roleplay** — [[law]] · [[gate]] · [[locked-block]]\n- **player to player** — [[faction-chat-channel]] · [[duel]]\n\n*start with [[demesne-limit]]. it is one inequality, and the rest of the\nsimulation is arranged around it.*\n\n### → [[moc-plugin-architecture]] — how it is built\n\nthe shape every feature in the codebase takes.\n\n- **the three layers** — [[service-layer]] · [[repository-pattern]] ·\n  [[jooq-persistence]]\n- **cross-cutting concerns** — [[optimistic-locking]] ·\n  [[value-class-identifier]] · [[main-thread-safety]] · [[spatial-value-types]]\n- **input** — [[player-interaction-status]]\n- **seams other software attaches to** — [[faction-events]] ·\n  [[notification]] · [[map-integration]]\n- **history still in the tree** — [[legacy-data-migration]]\n\n*start with [[service-layer]]. once you have seen one feature you have seen\nthem all.*\n\n---\n\n## → [[moc-plugin-ecosystem]] — the other plugins\n\nwhat surrounds the flagship: the shared library, the official expansions, and\nthe plugins it talks to at runtime.\n\n- **the library** — [[ponder]]\n- **expansions** — [[expansion-plugin]] · [[fiefs]] · [[currencies]]\n- **runtime neighbours** — [[mailboxes]]\n- **distribution** — [[dans-plugin-manager]]\n\n---\n\n## → [[moc-conventions-and-process]] — the standards\n\nwhat every repository in the organization is held to.\n\n- [[dpc-conventions]] · [[two-tier-documentation]] · [[release-automation]] ·\n  [[testing-and-ci]]\n\n---\n\n## → [[moc-web-and-infrastructure]] — outside minecraft\n\nthe public site, the containerised server, and the pipe between them.\n\n- [[dansplugins-dot-com]] · [[dpc-mc-server]] · [[dpc-api-faction-sync]]\n\n---\n\n## how to read this collection\n\n**if you have never touched the codebase**, read [[medieval-factions]], then\n[[faction]], then [[faction-power]]. those three carry most of the vocabulary\neverything else assumes.\n\n**if you are here to change code**, go straight to [[moc-plugin-architecture]].\n\n**if you are here to check something**, every concept note carries citations to\na dans-plugins repository pinned at a commit sha. open the source panel and\nfollow the link — the claim is meant to be falsifiable by reading the code it\npoints at. see [the note format](../../docs/note_format.md) for the rules.\n",
    "title": "Dan's Plugins Community",
    "type": "moc",
    "updated": "2026-08-08"
@@ -1828,7 +2332,7 @@
     "moc-dans-plugins-community",
     "moc-medieval-factions"
    ],
-   "body": "\nThe domain model is small enough to hold in your head, and almost all of it\nhangs off one number. This map walks it in dependency order rather than\nalphabetically.\n\n## Start with power\n\nEvery player carries [[player-power]], a scalar that rises with time online and\nfalls on death. A [[faction]]'s [[faction-power]] is the sum of its members'\npower, plus a conditional contribution from its vassals. That single number is\nthe currency of the whole simulation: it decides how much land a faction may\nhold, via the [[demesne-limit]].\n\nThis is the design's central lever. Territory is not bought, it is *staffed* —\nland follows people, and a faction that empties out loses its grip on the map.\n\n## Then land\n\nLand is claimed one Minecraft chunk at a time; see [[claimed-chunk]]. Whether a\nnon-member may build inside a claim depends on [[faction-flag]] settings and, for\nmembers, on the [[faction-permission]] granted by their [[faction-role]].\n\n## Then politics\n\nFactions relate to each other through [[faction-relationship]] — allied, at war,\nor bound in the liege/vassal hierarchy described in [[vassalage]]. Relationship\nchanges are two-sided, which is what [[approval-request]] exists to mediate.\n\n## Then the trimmings\n\nSeveral features are self-contained and can be read in any order once the above\nis clear: [[law]] (a faction's written rules), [[gate]] (redstone-triggered\nwalls), and [[locked-block]] (per-player container locks that operate\nindependently of faction land).\n\n## What ties it together\n\nNothing in this map is stored as an object graph — every one of these concepts\nis persisted through its own repository, and read back through the\n[[service-layer]]. If you are tracing a value from a command to the database,\n[[moc-plugin-architecture]] is the map you want next.\n",
+   "body": "\nThe domain model is small enough to hold in your head, and almost all of it\nhangs off one number. This map walks it in dependency order rather than\nalphabetically.\n\n## Start with power\n\nEvery player carries [[player-power]], a scalar that rises with time online and\nfalls on death. A [[faction]]'s [[faction-power]] is the sum of its members'\npower, plus a conditional contribution from its vassals. That single number is\nthe currency of the whole simulation: it decides how much land a faction may\nhold, via the [[demesne-limit]].\n\nThis is the design's central lever. Territory is not bought, it is *staffed* —\nland follows people, and a faction that empties out loses its grip on the map.\n\n## Then land\n\nLand is claimed one Minecraft chunk at a time; see [[claimed-chunk]]. Whether a\nnon-member may build inside a claim depends on [[faction-flag]] settings and, for\nmembers, on the [[faction-permission]] granted by their [[faction-role]].\n\n## Then politics\n\nFactions relate to each other through [[faction-relationship]] — allied, at war,\nor bound in the liege/vassal hierarchy described in [[vassalage]]. Relationship\nchanges are two-sided, which is what [[approval-request]] exists to mediate.\n\n## Then the trimmings\n\nSeveral features are self-contained and can be read in any order once the above\nis clear: [[law]] (a faction's written rules), [[gate]] (redstone-triggered\nwalls), and [[locked-block]] (per-player container locks that operate\nindependently of faction land).\n\nTwo more sit at the edge of the model, where the simulation touches the players\ndirectly rather than the factions: [[faction-chat-channel]] (three private\naudiences computed from the diplomacy graph at send time) and [[duel]] (a\nconsented fight nobody dies in, and the one record here with no faction on it).\n\n## What ties it together\n\nNothing in this map is stored as an object graph — every one of these concepts\nis persisted through its own repository, and read back through the\n[[service-layer]]. If you are tracing a value from a command to the database,\n[[moc-plugin-architecture]] is the map you want next.\n",
    "id": "moc-faction-domain-model",
    "links": [
     "player-power",
@@ -1845,6 +2349,8 @@
     "law",
     "gate",
     "locked-block",
+    "faction-chat-channel",
+    "duel",
     "service-layer",
     "moc-plugin-architecture"
    ],
@@ -1858,7 +2364,7 @@
     "medieval-factions",
     "domain-model"
    ],
-   "text": "faction domain model guided path through the nouns of the simulation — factions, power, land, and the relationships between them. \nthe domain model is small enough to hold in your head, and almost all of it\nhangs off one number. this map walks it in dependency order rather than\nalphabetically.\n\n## start with power\n\nevery player carries [[player-power]], a scalar that rises with time online and\nfalls on death. a [[faction]]'s [[faction-power]] is the sum of its members'\npower, plus a conditional contribution from its vassals. that single number is\nthe currency of the whole simulation: it decides how much land a faction may\nhold, via the [[demesne-limit]].\n\nthis is the design's central lever. territory is not bought, it is *staffed* —\nland follows people, and a faction that empties out loses its grip on the map.\n\n## then land\n\nland is claimed one minecraft chunk at a time; see [[claimed-chunk]]. whether a\nnon-member may build inside a claim depends on [[faction-flag]] settings and, for\nmembers, on the [[faction-permission]] granted by their [[faction-role]].\n\n## then politics\n\nfactions relate to each other through [[faction-relationship]] — allied, at war,\nor bound in the liege/vassal hierarchy described in [[vassalage]]. relationship\nchanges are two-sided, which is what [[approval-request]] exists to mediate.\n\n## then the trimmings\n\nseveral features are self-contained and can be read in any order once the above\nis clear: [[law]] (a faction's written rules), [[gate]] (redstone-triggered\nwalls), and [[locked-block]] (per-player container locks that operate\nindependently of faction land).\n\n## what ties it together\n\nnothing in this map is stored as an object graph — every one of these concepts\nis persisted through its own repository, and read back through the\n[[service-layer]]. if you are tracing a value from a command to the database,\n[[moc-plugin-architecture]] is the map you want next.\n",
+   "text": "faction domain model guided path through the nouns of the simulation — factions, power, land, and the relationships between them. \nthe domain model is small enough to hold in your head, and almost all of it\nhangs off one number. this map walks it in dependency order rather than\nalphabetically.\n\n## start with power\n\nevery player carries [[player-power]], a scalar that rises with time online and\nfalls on death. a [[faction]]'s [[faction-power]] is the sum of its members'\npower, plus a conditional contribution from its vassals. that single number is\nthe currency of the whole simulation: it decides how much land a faction may\nhold, via the [[demesne-limit]].\n\nthis is the design's central lever. territory is not bought, it is *staffed* —\nland follows people, and a faction that empties out loses its grip on the map.\n\n## then land\n\nland is claimed one minecraft chunk at a time; see [[claimed-chunk]]. whether a\nnon-member may build inside a claim depends on [[faction-flag]] settings and, for\nmembers, on the [[faction-permission]] granted by their [[faction-role]].\n\n## then politics\n\nfactions relate to each other through [[faction-relationship]] — allied, at war,\nor bound in the liege/vassal hierarchy described in [[vassalage]]. relationship\nchanges are two-sided, which is what [[approval-request]] exists to mediate.\n\n## then the trimmings\n\nseveral features are self-contained and can be read in any order once the above\nis clear: [[law]] (a faction's written rules), [[gate]] (redstone-triggered\nwalls), and [[locked-block]] (per-player container locks that operate\nindependently of faction land).\n\ntwo more sit at the edge of the model, where the simulation touches the players\ndirectly rather than the factions: [[faction-chat-channel]] (three private\naudiences computed from the diplomacy graph at send time) and [[duel]] (a\nconsented fight nobody dies in, and the one record here with no faction on it).\n\n## what ties it together\n\nnothing in this map is stored as an object graph — every one of these concepts\nis persisted through its own repository, and read back through the\n[[service-layer]]. if you are tracing a value from a command to the database,\n[[moc-plugin-architecture]] is the map you want next.\n",
    "title": "Faction Domain Model",
    "type": "moc",
    "updated": "2026-08-07"
@@ -1917,7 +2423,7 @@
     "moc-faction-domain-model",
     "moc-medieval-factions"
    ],
-   "body": "\n[[medieval-factions]] has a consistent internal shape, and once you have seen\none feature you have seen them all. This map describes that shape.\n\n## The three layers\n\n1. **Commands** parse player input and delegate immediately.\n2. **Services** own the in-memory state and the business rules —\n   [[service-layer]].\n3. **Repositories** are interfaces that hide storage — [[repository-pattern]] —\n   implemented against [[jooq-persistence]].\n\nA new feature is almost always: a data class, an ID value class\n([[value-class-identifier]]), a repository interface, a jOOQ implementation, a\nservice, and a command.\n\n## Cross-cutting concerns\n\n- **[[optimistic-locking]]** — every mutable record carries a version; a stale\n  write is rejected rather than silently overwriting.\n- **[[main-thread-safety]]** — Bukkit state is not thread-safe, so anything\n  doing I/O must snapshot on the main thread and act off it.\n- **[[faction-events]]** — the plugin fires cancellable Bukkit events, which is\n  the supported extension point for other plugins.\n- **[[legacy-data-migration]]** — flat files from version 4 are read once and\n  written into the database.\n\n## Where to attach\n\nIf you are writing an [[expansion-plugin]], the seams that matter are\n[[faction-events]] (react to things) and the [[service-layer]] (read and change\nthings). If you are integrating an external system, look at how [[notification]]\nand [[map-integration]] define an interface and swap in an implementation at\nstartup — that is the pattern to copy.\n",
+   "body": "\n[[medieval-factions]] has a consistent internal shape, and once you have seen\none feature you have seen them all. This map describes that shape.\n\n## The three layers\n\n1. **Commands** parse player input and delegate immediately.\n2. **Services** own the in-memory state and the business rules —\n   [[service-layer]].\n3. **Repositories** are interfaces that hide storage — [[repository-pattern]] —\n   implemented against [[jooq-persistence]].\n\nA new feature is almost always: a data class, an ID value class\n([[value-class-identifier]]), a repository interface, a jOOQ implementation, a\nservice, and a command.\n\n## Cross-cutting concerns\n\n- **[[optimistic-locking]]** — every mutable record carries a version; a stale\n  write is rejected rather than silently overwriting.\n- **[[main-thread-safety]]** — Bukkit state is not thread-safe, so anything\n  doing I/O must snapshot on the main thread and act off it.\n- **[[faction-events]]** — the plugin fires cancellable Bukkit events, which is\n  the supported extension point for other plugins.\n- **[[legacy-data-migration]]** — flat files from version 4 are read once and\n  written into the database.\n- **[[spatial-value-types]]** — the `area` package's world-UUID records, which\n  are what makes a position storable and safe to carry off the main thread.\n- **[[player-interaction-status]]** — the per-player mode that lets a command\n  take a *block* as an argument, by consuming the player's next click.\n\n## Where to attach\n\nIf you are writing an [[expansion-plugin]], the seams that matter are\n[[faction-events]] (react to things) and the [[service-layer]] (read and change\nthings). If you are integrating an external system, look at how [[notification]]\nand [[map-integration]] define an interface and swap in an implementation at\nstartup — that is the pattern to copy.\n",
    "id": "moc-plugin-architecture",
    "links": [
     "medieval-factions",
@@ -1929,6 +2435,8 @@
     "main-thread-safety",
     "faction-events",
     "legacy-data-migration",
+    "spatial-value-types",
+    "player-interaction-status",
     "expansion-plugin",
     "notification",
     "map-integration"
@@ -1943,7 +2451,7 @@
     "medieval-factions",
     "architecture"
    ],
-   "text": "plugin architecture how the flagship is layered — services over repositories over jooq — and the cross-cutting concerns that shape every feature. \n[[medieval-factions]] has a consistent internal shape, and once you have seen\none feature you have seen them all. this map describes that shape.\n\n## the three layers\n\n1. **commands** parse player input and delegate immediately.\n2. **services** own the in-memory state and the business rules —\n   [[service-layer]].\n3. **repositories** are interfaces that hide storage — [[repository-pattern]] —\n   implemented against [[jooq-persistence]].\n\na new feature is almost always: a data class, an id value class\n([[value-class-identifier]]), a repository interface, a jooq implementation, a\nservice, and a command.\n\n## cross-cutting concerns\n\n- **[[optimistic-locking]]** — every mutable record carries a version; a stale\n  write is rejected rather than silently overwriting.\n- **[[main-thread-safety]]** — bukkit state is not thread-safe, so anything\n  doing i/o must snapshot on the main thread and act off it.\n- **[[faction-events]]** — the plugin fires cancellable bukkit events, which is\n  the supported extension point for other plugins.\n- **[[legacy-data-migration]]** — flat files from version 4 are read once and\n  written into the database.\n\n## where to attach\n\nif you are writing an [[expansion-plugin]], the seams that matter are\n[[faction-events]] (react to things) and the [[service-layer]] (read and change\nthings). if you are integrating an external system, look at how [[notification]]\nand [[map-integration]] define an interface and swap in an implementation at\nstartup — that is the pattern to copy.\n",
+   "text": "plugin architecture how the flagship is layered — services over repositories over jooq — and the cross-cutting concerns that shape every feature. \n[[medieval-factions]] has a consistent internal shape, and once you have seen\none feature you have seen them all. this map describes that shape.\n\n## the three layers\n\n1. **commands** parse player input and delegate immediately.\n2. **services** own the in-memory state and the business rules —\n   [[service-layer]].\n3. **repositories** are interfaces that hide storage — [[repository-pattern]] —\n   implemented against [[jooq-persistence]].\n\na new feature is almost always: a data class, an id value class\n([[value-class-identifier]]), a repository interface, a jooq implementation, a\nservice, and a command.\n\n## cross-cutting concerns\n\n- **[[optimistic-locking]]** — every mutable record carries a version; a stale\n  write is rejected rather than silently overwriting.\n- **[[main-thread-safety]]** — bukkit state is not thread-safe, so anything\n  doing i/o must snapshot on the main thread and act off it.\n- **[[faction-events]]** — the plugin fires cancellable bukkit events, which is\n  the supported extension point for other plugins.\n- **[[legacy-data-migration]]** — flat files from version 4 are read once and\n  written into the database.\n- **[[spatial-value-types]]** — the `area` package's world-uuid records, which\n  are what makes a position storable and safe to carry off the main thread.\n- **[[player-interaction-status]]** — the per-player mode that lets a command\n  take a *block* as an argument, by consuming the player's next click.\n\n## where to attach\n\nif you are writing an [[expansion-plugin]], the seams that matter are\n[[faction-events]] (react to things) and the [[service-layer]] (read and change\nthings). if you are integrating an external system, look at how [[notification]]\nand [[map-integration]] define an interface and swap in an implementation at\nstartup — that is the pattern to copy.\n",
    "title": "Plugin Architecture",
    "type": "moc",
    "updated": "2026-08-07"
@@ -1953,7 +2461,7 @@
     "moc-dans-plugins-community",
     "moc-medieval-factions"
    ],
-   "body": "\nThe organization holds roughly forty repositories. They are not forty unrelated\nplugins — they cluster.\n\n## The library\n\n[[ponder]] is the shared Kotlin/Java library: a multi-module Gradle project\nproviding command dispatch, caching, and Bukkit helpers used across plugins.\n\n## The expansions\n\n[[expansion-plugin]] describes the pattern: a plugin that hard-depends on\n[[medieval-factions]] and extends the simulation rather than standing alone.\n\n- [[fiefs]] — sub-factions inside a faction.\n- [[currencies]] — faction-minted local money.\n\n## The runtime neighbours\n\nPlugins the flagship detects and uses if they happen to be installed:\n\n- [[mailboxes]] — persistent player mail, used as a [[notification]] backend.\n- [[map-integration]] — Dynmap and BlueMap surfaces for [[claimed-chunk]] data.\n\n## Distribution and hosting\n\n- [[dans-plugin-manager]] — installs DPC plugins from in-game or the console.\n- [[dpc-mc-server]] — infrastructure-as-code server that runs a curated set of\n  the plugins together, and therefore doubles as the integration test bed.\n\n## The rest\n\nMany repositories in the organization are small standalone plugins with no\ndependency on the flagship. They matter to this collection mainly as subjects of\n[[dpc-conventions]] — the standards effort exists precisely to bring them up to\nthe flagship's level.\n",
+   "body": "\nThe organization holds roughly forty repositories. They are not forty unrelated\nplugins — they cluster.\n\n## The library\n\n[[ponder]] is the shared Kotlin/Java library: a multi-module Gradle project\nproviding command dispatch, caching, and Bukkit helpers used across plugins.\n\n## The expansions\n\n[[expansion-plugin]] describes the pattern: a plugin that hard-depends on\n[[medieval-factions]] and extends the simulation rather than standing alone.\n\n- [[fiefs]] — sub-factions inside a faction.\n- [[currencies]] — faction-minted local money.\n\n## The runtime neighbours\n\nPlugins the flagship detects and uses if they happen to be installed:\n\n- [[mailboxes]] — persistent player mail, used as a [[notification]] backend.\n- [[map-integration]] — Dynmap and BlueMap surfaces for [[claimed-chunk]] data.\n\n## Distribution and hosting\n\n- [[dans-plugin-manager]] — installs DPC plugins from in-game or the console.\n- [[dpc-mc-server]] — infrastructure-as-code server that runs a curated set of\n  the plugins together, and therefore doubles as the integration test bed.\n\n## The standalone plugins\n\nNot everything here orbits the flagship. These are the most-downloaded plugins\nthat depend on nothing in the organization but [[ponder]], and each earns a note\nby holding an idea the collection did not otherwise have:\n\n- [[medieval-roleplay-engine]] — chat whose audience is a radius measured in\n  blocks rather than a membership list, which is the exact counterpoint to\n  [[faction-chat-channel]] resolving one from the diplomacy graph.\n- [[wild-pets]] — taming generalised into a per-entity-type table of required\n  item, quantity and success chance, so any mob becomes a pet.\n- [[simple-skills]] — progression in which a level buys a rising *probability*\n  of a perk rather than unlocking one.\n- [[food-spoilage]] — the clearest case in the organization of a plugin with no\n  persistence layer at all, because the item stack itself is the database. Worth\n  reading directly against [[repository-pattern]] and [[jooq-persistence]].\n- [[alternate-account-finder]] — deterministic encryption chosen so that an\n  equality join still works over ciphertext, and the privacy cost that buys.\n\n## The rest\n\nThe remaining repositories are small standalone plugins that do one obvious\nthing each. They matter to this collection mainly as subjects of\n[[dpc-conventions]] — the standards effort exists precisely to bring them up to\nthe flagship's level.\n",
    "id": "moc-plugin-ecosystem",
    "links": [
     "ponder",
@@ -1967,6 +2475,14 @@
     "claimed-chunk",
     "dans-plugin-manager",
     "dpc-mc-server",
+    "medieval-roleplay-engine",
+    "faction-chat-channel",
+    "wild-pets",
+    "simple-skills",
+    "food-spoilage",
+    "repository-pattern",
+    "jooq-persistence",
+    "alternate-account-finder",
     "dpc-conventions"
    ],
    "moc": "",
@@ -1984,16 +2500,16 @@
      "url": "https://github.com/Dans-Plugins/dpc-mc-server/blob/d42e0ec06f9b29baaa043442d24ef2dd81edfa49/README.md"
     }
    ],
-   "summary": "The plugins around the flagship — the shared library, the official expansions, and the plugins Medieval Factions talks to at runtime.",
+   "summary": "The plugins around the flagship — the shared library, the official expansions, the plugins Medieval Factions talks to at runtime, and the standalone plugins that stand apart from it entirely.",
    "tags": [
     "moc",
     "dpc",
     "ecosystem"
    ],
-   "text": "plugin ecosystem the plugins around the flagship — the shared library, the official expansions, and the plugins medieval factions talks to at runtime. \nthe organization holds roughly forty repositories. they are not forty unrelated\nplugins — they cluster.\n\n## the library\n\n[[ponder]] is the shared kotlin/java library: a multi-module gradle project\nproviding command dispatch, caching, and bukkit helpers used across plugins.\n\n## the expansions\n\n[[expansion-plugin]] describes the pattern: a plugin that hard-depends on\n[[medieval-factions]] and extends the simulation rather than standing alone.\n\n- [[fiefs]] — sub-factions inside a faction.\n- [[currencies]] — faction-minted local money.\n\n## the runtime neighbours\n\nplugins the flagship detects and uses if they happen to be installed:\n\n- [[mailboxes]] — persistent player mail, used as a [[notification]] backend.\n- [[map-integration]] — dynmap and bluemap surfaces for [[claimed-chunk]] data.\n\n## distribution and hosting\n\n- [[dans-plugin-manager]] — installs dpc plugins from in-game or the console.\n- [[dpc-mc-server]] — infrastructure-as-code server that runs a curated set of\n  the plugins together, and therefore doubles as the integration test bed.\n\n## the rest\n\nmany repositories in the organization are small standalone plugins with no\ndependency on the flagship. they matter to this collection mainly as subjects of\n[[dpc-conventions]] — the standards effort exists precisely to bring them up to\nthe flagship's level.\n",
+   "text": "plugin ecosystem the plugins around the flagship — the shared library, the official expansions, the plugins medieval factions talks to at runtime, and the standalone plugins that stand apart from it entirely. \nthe organization holds roughly forty repositories. they are not forty unrelated\nplugins — they cluster.\n\n## the library\n\n[[ponder]] is the shared kotlin/java library: a multi-module gradle project\nproviding command dispatch, caching, and bukkit helpers used across plugins.\n\n## the expansions\n\n[[expansion-plugin]] describes the pattern: a plugin that hard-depends on\n[[medieval-factions]] and extends the simulation rather than standing alone.\n\n- [[fiefs]] — sub-factions inside a faction.\n- [[currencies]] — faction-minted local money.\n\n## the runtime neighbours\n\nplugins the flagship detects and uses if they happen to be installed:\n\n- [[mailboxes]] — persistent player mail, used as a [[notification]] backend.\n- [[map-integration]] — dynmap and bluemap surfaces for [[claimed-chunk]] data.\n\n## distribution and hosting\n\n- [[dans-plugin-manager]] — installs dpc plugins from in-game or the console.\n- [[dpc-mc-server]] — infrastructure-as-code server that runs a curated set of\n  the plugins together, and therefore doubles as the integration test bed.\n\n## the standalone plugins\n\nnot everything here orbits the flagship. these are the most-downloaded plugins\nthat depend on nothing in the organization but [[ponder]], and each earns a note\nby holding an idea the collection did not otherwise have:\n\n- [[medieval-roleplay-engine]] — chat whose audience is a radius measured in\n  blocks rather than a membership list, which is the exact counterpoint to\n  [[faction-chat-channel]] resolving one from the diplomacy graph.\n- [[wild-pets]] — taming generalised into a per-entity-type table of required\n  item, quantity and success chance, so any mob becomes a pet.\n- [[simple-skills]] — progression in which a level buys a rising *probability*\n  of a perk rather than unlocking one.\n- [[food-spoilage]] — the clearest case in the organization of a plugin with no\n  persistence layer at all, because the item stack itself is the database. worth\n  reading directly against [[repository-pattern]] and [[jooq-persistence]].\n- [[alternate-account-finder]] — deterministic encryption chosen so that an\n  equality join still works over ciphertext, and the privacy cost that buys.\n\n## the rest\n\nthe remaining repositories are small standalone plugins that do one obvious\nthing each. they matter to this collection mainly as subjects of\n[[dpc-conventions]] — the standards effort exists precisely to bring them up to\nthe flagship's level.\n",
    "title": "Plugin Ecosystem",
    "type": "moc",
-   "updated": "2026-08-07"
+   "updated": "2026-08-24"
   },
   "moc-web-and-infrastructure": {
    "backlinks": [
@@ -2027,6 +2543,7 @@
   },
   "notification": {
    "backlinks": [
+    "alternate-account-finder",
     "mailboxes",
     "medieval-factions",
     "moc-dans-plugins-community",
@@ -2090,6 +2607,7 @@
   "optimistic-locking": {
    "backlinks": [
     "currencies",
+    "duel",
     "faction",
     "faction-flag",
     "faction-role",
@@ -2099,6 +2617,7 @@
     "medieval-factions",
     "moc-dans-plugins-community",
     "moc-plugin-architecture",
+    "player-interaction-status",
     "repository-pattern",
     "service-layer"
    ],
@@ -2150,10 +2669,82 @@
    "type": "concept",
    "updated": "2026-08-07"
   },
+  "player-interaction-status": {
+   "backlinks": [
+    "moc-dans-plugins-community",
+    "moc-plugin-architecture",
+    "wild-pets"
+   ],
+   "body": "\nSome commands need a *block* as an argument, and a block cannot be typed. The\nplugin solves this by putting the player into a mode: the command announces what\nthe next click will mean, and the click supplies the argument.\n\n## Eight modes, two features\n\n`MfInteractionStatus` has eight values, and every one of them belongs to a\nfeature already described elsewhere in this collection. `LOCKING`, `UNLOCKING`,\n`CHECKING_ACCESS`, `ADDING_ACCESSOR` and `REMOVING_ACCESSOR` serve\n[[locked-block]]; `SELECTING_GATE_POSITION_1`, `SELECTING_GATE_POSITION_2` and\n`SELECTING_GATE_TRIGGER` serve [[gate]]. Neither of those notes names the\nmechanism, because the mechanism lives in neither package — it is the seam\nbetween a command and the click that completes it.\n\n## The click is consumed, not shared\n\n`PlayerInteractListener` opens by branching on the status. Each non-null branch\nruns its handler and sets `event.isCancelled = true`, so a player in a mode does\nnot also open the chest they clicked. Only the `null` branch falls through to\n`applyProtections`, the ordinary claim and lock enforcement.\n\nGate selection is a small state machine within this: selecting position 1\nadvances the player to `SELECTING_GATE_POSITION_2`, and the trigger click clears\nthe status back to `null`.\n\n## Persisted, not just cached\n\n`MfInteractionService` keeps statuses in a `ConcurrentHashMap`, but every change\ngoes through a repository first and reaches the cache only if that write\nsucceeded — the same write-through discipline as the rest of the\n[[service-layer]], including mapping an [[optimistic-locking]] failure to\n`CONFLICT`.\n\nThe consequence, which follows from the code rather than from anything stated in\nit: quitting calls `unloadInteractionStatus`, which drops the cache entry\nwithout deleting the row, and logging in reloads it. A player who types `/lock`\nand disconnects is therefore still in `LOCKING` mode when they return. **No\ncomment, commit message or document in the repository explains why the status is\ndurable rather than session-scoped.**\n\n## Related\n\nThe modes are cancellable from the command side too — `/lock cancel` refuses\nunless the player is actually in `LOCKING`, then sets the status to `null`.\nCompare [[main-thread-safety]] for why the listener reads a cached value instead\nof querying storage on every click.\n",
+   "id": "player-interaction-status",
+   "links": [
+    "locked-block",
+    "gate",
+    "service-layer",
+    "optimistic-locking",
+    "main-thread-safety"
+   ],
+   "moc": "moc-plugin-architecture",
+   "sourcePath": "notes/concepts/player-interaction-status.md",
+   "sourceUrl": "https://github.com/Dans-Plugins/dpc-zettelkasten/blob/main/notes/concepts/player-interaction-status.md",
+   "sources": [
+    {
+     "claim": "Interaction status is an enum of eight values, five belonging to block locking and three to gate creation.",
+     "label": "Medieval-Factions/MfInteractionStatus.kt:3-12",
+     "lines": "3-12",
+     "path": "src/main/kotlin/com/dansplugins/factionsystem/interaction/MfInteractionStatus.kt",
+     "ref": "3a51c55366b544d31429fae8bcb64efaf1878e15",
+     "repo": "Dans-Plugins/Medieval-Factions",
+     "shortRef": "3a51c55",
+     "url": "https://github.com/Dans-Plugins/Medieval-Factions/blob/3a51c55366b544d31429fae8bcb64efaf1878e15/src/main/kotlin/com/dansplugins/factionsystem/interaction/MfInteractionStatus.kt#L3-L12"
+    },
+    {
+     "claim": "The interact listener branches on the player's interaction status, cancels the event for every non-null status, and falls through to the normal protection checks only when the status is null.",
+     "label": "Medieval-Factions/PlayerInteractListener.kt:67-102",
+     "lines": "67-102",
+     "path": "src/main/kotlin/com/dansplugins/factionsystem/listener/PlayerInteractListener.kt",
+     "ref": "3a51c55366b544d31429fae8bcb64efaf1878e15",
+     "repo": "Dans-Plugins/Medieval-Factions",
+     "shortRef": "3a51c55",
+     "url": "https://github.com/Dans-Plugins/Medieval-Factions/blob/3a51c55366b544d31429fae8bcb64efaf1878e15/src/main/kotlin/com/dansplugins/factionsystem/listener/PlayerInteractListener.kt#L67-L102"
+    },
+    {
+     "claim": "The service writes the status through its repository first and updates the in-memory ConcurrentHashMap only when that write succeeds.",
+     "label": "Medieval-Factions/MfInteractionService.kt:15-35",
+     "lines": "15-35",
+     "path": "src/main/kotlin/com/dansplugins/factionsystem/interaction/MfInteractionService.kt",
+     "ref": "3a51c55366b544d31429fae8bcb64efaf1878e15",
+     "repo": "Dans-Plugins/Medieval-Factions",
+     "shortRef": "3a51c55",
+     "url": "https://github.com/Dans-Plugins/Medieval-Factions/blob/3a51c55366b544d31429fae8bcb64efaf1878e15/src/main/kotlin/com/dansplugins/factionsystem/interaction/MfInteractionService.kt#L15-L35"
+    },
+    {
+     "claim": "Quitting unloads the player's interaction status from the cache rather than clearing it.",
+     "label": "Medieval-Factions/PlayerQuitListener.kt:25-26",
+     "lines": "25-26",
+     "path": "src/main/kotlin/com/dansplugins/factionsystem/listener/PlayerQuitListener.kt",
+     "ref": "3a51c55366b544d31429fae8bcb64efaf1878e15",
+     "repo": "Dans-Plugins/Medieval-Factions",
+     "shortRef": "3a51c55",
+     "url": "https://github.com/Dans-Plugins/Medieval-Factions/blob/3a51c55366b544d31429fae8bcb64efaf1878e15/src/main/kotlin/com/dansplugins/factionsystem/listener/PlayerQuitListener.kt#L25-L26"
+    }
+   ],
+   "summary": "A per-player mode that makes the next block a player clicks mean something other than \"use this block\".",
+   "tags": [
+    "medieval-factions",
+    "architecture",
+    "interaction"
+   ],
+   "text": "player interaction status a per-player mode that makes the next block a player clicks mean something other than \"use this block\". \nsome commands need a *block* as an argument, and a block cannot be typed. the\nplugin solves this by putting the player into a mode: the command announces what\nthe next click will mean, and the click supplies the argument.\n\n## eight modes, two features\n\n`mfinteractionstatus` has eight values, and every one of them belongs to a\nfeature already described elsewhere in this collection. `locking`, `unlocking`,\n`checking_access`, `adding_accessor` and `removing_accessor` serve\n[[locked-block]]; `selecting_gate_position_1`, `selecting_gate_position_2` and\n`selecting_gate_trigger` serve [[gate]]. neither of those notes names the\nmechanism, because the mechanism lives in neither package — it is the seam\nbetween a command and the click that completes it.\n\n## the click is consumed, not shared\n\n`playerinteractlistener` opens by branching on the status. each non-null branch\nruns its handler and sets `event.iscancelled = true`, so a player in a mode does\nnot also open the chest they clicked. only the `null` branch falls through to\n`applyprotections`, the ordinary claim and lock enforcement.\n\ngate selection is a small state machine within this: selecting position 1\nadvances the player to `selecting_gate_position_2`, and the trigger click clears\nthe status back to `null`.\n\n## persisted, not just cached\n\n`mfinteractionservice` keeps statuses in a `concurrenthashmap`, but every change\ngoes through a repository first and reaches the cache only if that write\nsucceeded — the same write-through discipline as the rest of the\n[[service-layer]], including mapping an [[optimistic-locking]] failure to\n`conflict`.\n\nthe consequence, which follows from the code rather than from anything stated in\nit: quitting calls `unloadinteractionstatus`, which drops the cache entry\nwithout deleting the row, and logging in reloads it. a player who types `/lock`\nand disconnects is therefore still in `locking` mode when they return. **no\ncomment, commit message or document in the repository explains why the status is\ndurable rather than session-scoped.**\n\n## related\n\nthe modes are cancellable from the command side too — `/lock cancel` refuses\nunless the player is actually in `locking`, then sets the status to `null`.\ncompare [[main-thread-safety]] for why the listener reads a cached value instead\nof querying storage on every click.\n",
+   "title": "Player Interaction Status",
+   "type": "concept",
+   "updated": "2026-08-14"
+  },
   "player-power": {
    "backlinks": [
     "demesne-limit",
     "faction",
+    "faction-chat-channel",
     "faction-power",
     "medieval-factions",
     "moc-dans-plugins-community",
@@ -2206,9 +2797,11 @@
   "ponder": {
    "backlinks": [
     "fiefs",
+    "food-spoilage",
     "moc-dans-plugins-community",
     "moc-plugin-ecosystem",
-    "release-automation"
+    "release-automation",
+    "simple-skills"
    ],
    "body": "\nPonder is the shared library DPC plugins build on. It is small — three modules,\neach a handful of files — and published as Maven artifacts rather than shaded\ninto each plugin.\n\n## The three modules\n\n| Module | Contents |\n|---|---|\n| `ponder-bukkit` | Bukkit/Spigot helpers — distance calculations, plugin lookups |\n| `ponder-cache` | A generic `Cache<K, V>` interface with a default implementation and a `CacheManager` |\n| `ponder-commands` | A `Command` abstraction, a `CommandService` registry, and typed `CommandResult` values |\n\n`ponder-commands` is the interesting one architecturally. `CommandService` is a\ntwo-method interface — `addCommand(name, command)` and `getCommand(name)` — and\nresults are typed values such as `IncorrectUsageFailure` rather than booleans.\nThat is the same \"failures are values\" instinct visible in the flagship's\n[[service-layer]].\n\n## Published, not vendored\n\nModules are consumed from `repo.dansplugins.com` (the community's Nexus) and\nfrom GitHub Packages, under the `com.dansplugins` group. Publishing rather than\ncopying means a fix reaches every consumer on the next dependency bump.\n\nThe caveat is version skew across the fleet. [[fiefs]] still builds against a\nvendored `Ponder-v0.15-alpha-2.jar` predating the current module layout, so\n\"which Ponder?\" is a real question when reading an older plugin.\n\n## Related\n\nPonder lives in the Dans-Plugins organization but is named for\n[Preponderous](https://github.com/Preponderous-Software), and its package root\nis still `preponderous.ponder` while its Maven group is `com.dansplugins`. No\nsource in the repository explains the mismatch, so treat it as a naming artefact\nrather than a boundary that means something.\n",
    "id": "ponder",
@@ -2268,14 +2861,16 @@
     "dpc-conventions",
     "moc-conventions-and-process",
     "moc-dans-plugins-community",
+    "release-channel",
     "testing-and-ci"
    ],
-   "body": "\nEvery DPC plugin should build and attach its own jar when a release is created.\nThe convention specifies the workflow file down to the steps.\n\n## The workflow\n\n`.github/workflows/release.yml`, triggered `on: release: types: [created]`, with\n`permissions: contents: write`. It checks out, sets up JDK 17 (Temurin), makes\n`gradlew` executable, runs `./gradlew clean build`, and uploads `build/libs/*.jar`\nto the release.\n\n## Why drafts matter\n\nThe trigger fires on release *creation*, including drafts. That is deliberate: a\nmaintainer can create a draft release, let CI build and attach the jar, and hand\nthat artifact to users as an experimental build before deciding to publish.\nTesting a release candidate needs no separate pipeline.\n\n## Why it is a convention and not a nicety\n\nManual jar uploads fail in two ways that automation removes. They can be\nforgotten — leaving a release with notes and no download. And they can be built\nfrom a dirty working tree, so the published jar does not correspond to the tag.\nBuilding in CI from a clean checkout makes the artifact a function of the commit.\n\nThere is also a consumer that depends on it: [[dans-plugin-manager]] installs\nplugins by reading GitHub releases. A release without an attached jar is a\nrelease DPM cannot install.\n\n## The flagship deviates, for a reason\n\n[[medieval-factions]] follows the template but inserts a step before the build:\nit clones [[ponder]] at tag `2.0.0` and runs `publishToMavenLocal`. The library\nversion it needs is not resolvable from a public repository at build time, so CI\nbuilds it from source first.\n\nThat is worth knowing before copying the convention's workflow verbatim into a\nplugin that depends on Ponder — the template alone will not resolve the\ndependency.\n\n## Related\n\n[[testing-and-ci]] covers the build and test side. Both live in\n[[dpc-conventions]].\n",
+   "body": "\nEvery DPC plugin should build and attach its own jar when a release is created.\nThe convention specifies the workflow file down to the steps.\n\n## The workflow\n\n`.github/workflows/release.yml`, triggered `on: release: types: [created]`, with\n`permissions: contents: write`. It checks out, sets up JDK 17 (Temurin), makes\n`gradlew` executable, runs `./gradlew clean build`, and uploads `build/libs/*.jar`\nto the release.\n\n## Why drafts matter\n\nThe trigger fires on release *creation*, including drafts. That is deliberate: a\nmaintainer can create a draft release, let CI build and attach the jar, and hand\nthat artifact to users as an experimental build before deciding to publish.\nTesting a release candidate needs no separate pipeline.\n\n## Why it is a convention and not a nicety\n\nManual jar uploads fail in two ways that automation removes. They can be\nforgotten — leaving a release with notes and no download. And they can be built\nfrom a dirty working tree, so the published jar does not correspond to the tag.\nBuilding in CI from a clean checkout makes the artifact a function of the commit.\n\nThere is also a consumer that depends on it: [[dans-plugin-manager]] installs\nplugins by reading GitHub releases. A release without an attached jar is a\nrelease DPM cannot install.\n\n## The flagship deviates, for a reason\n\n[[medieval-factions]] follows the template but inserts a step before the build:\nit clones [[ponder]] at tag `2.0.0` and runs `publishToMavenLocal`. The library\nversion it needs is not resolvable from a public repository at build time, so CI\nbuilds it from source first.\n\nThat is worth knowing before copying the convention's workflow verbatim into a\nplugin that depends on Ponder — the template alone will not resolve the\ndependency.\n\n## The other half\n\nThis convention covers releases a maintainer cuts deliberately. Repositories also\npublish a rolling `dev` prerelease on every merge to `main`, which is what the\nexperimental [[release-channel]] serves — the same automation, on a trigger that\nfires continuously rather than on a human decision.\n\n## Related\n\n[[testing-and-ci]] covers the build and test side. Both live in\n[[dpc-conventions]].\n",
    "id": "release-automation",
    "links": [
     "dans-plugin-manager",
     "medieval-factions",
     "ponder",
+    "release-channel",
     "testing-and-ci",
     "dpc-conventions"
    ],
@@ -2310,17 +2905,79 @@
     "conventions",
     "ci"
    ],
-   "text": "release automation creating a github release triggers a workflow that builds the plugin and attaches the jar, so every release has a reproducible artifact. \nevery dpc plugin should build and attach its own jar when a release is created.\nthe convention specifies the workflow file down to the steps.\n\n## the workflow\n\n`.github/workflows/release.yml`, triggered `on: release: types: [created]`, with\n`permissions: contents: write`. it checks out, sets up jdk 17 (temurin), makes\n`gradlew` executable, runs `./gradlew clean build`, and uploads `build/libs/*.jar`\nto the release.\n\n## why drafts matter\n\nthe trigger fires on release *creation*, including drafts. that is deliberate: a\nmaintainer can create a draft release, let ci build and attach the jar, and hand\nthat artifact to users as an experimental build before deciding to publish.\ntesting a release candidate needs no separate pipeline.\n\n## why it is a convention and not a nicety\n\nmanual jar uploads fail in two ways that automation removes. they can be\nforgotten — leaving a release with notes and no download. and they can be built\nfrom a dirty working tree, so the published jar does not correspond to the tag.\nbuilding in ci from a clean checkout makes the artifact a function of the commit.\n\nthere is also a consumer that depends on it: [[dans-plugin-manager]] installs\nplugins by reading github releases. a release without an attached jar is a\nrelease dpm cannot install.\n\n## the flagship deviates, for a reason\n\n[[medieval-factions]] follows the template but inserts a step before the build:\nit clones [[ponder]] at tag `2.0.0` and runs `publishtomavenlocal`. the library\nversion it needs is not resolvable from a public repository at build time, so ci\nbuilds it from source first.\n\nthat is worth knowing before copying the convention's workflow verbatim into a\nplugin that depends on ponder — the template alone will not resolve the\ndependency.\n\n## related\n\n[[testing-and-ci]] covers the build and test side. both live in\n[[dpc-conventions]].\n",
+   "text": "release automation creating a github release triggers a workflow that builds the plugin and attaches the jar, so every release has a reproducible artifact. \nevery dpc plugin should build and attach its own jar when a release is created.\nthe convention specifies the workflow file down to the steps.\n\n## the workflow\n\n`.github/workflows/release.yml`, triggered `on: release: types: [created]`, with\n`permissions: contents: write`. it checks out, sets up jdk 17 (temurin), makes\n`gradlew` executable, runs `./gradlew clean build`, and uploads `build/libs/*.jar`\nto the release.\n\n## why drafts matter\n\nthe trigger fires on release *creation*, including drafts. that is deliberate: a\nmaintainer can create a draft release, let ci build and attach the jar, and hand\nthat artifact to users as an experimental build before deciding to publish.\ntesting a release candidate needs no separate pipeline.\n\n## why it is a convention and not a nicety\n\nmanual jar uploads fail in two ways that automation removes. they can be\nforgotten — leaving a release with notes and no download. and they can be built\nfrom a dirty working tree, so the published jar does not correspond to the tag.\nbuilding in ci from a clean checkout makes the artifact a function of the commit.\n\nthere is also a consumer that depends on it: [[dans-plugin-manager]] installs\nplugins by reading github releases. a release without an attached jar is a\nrelease dpm cannot install.\n\n## the flagship deviates, for a reason\n\n[[medieval-factions]] follows the template but inserts a step before the build:\nit clones [[ponder]] at tag `2.0.0` and runs `publishtomavenlocal`. the library\nversion it needs is not resolvable from a public repository at build time, so ci\nbuilds it from source first.\n\nthat is worth knowing before copying the convention's workflow verbatim into a\nplugin that depends on ponder — the template alone will not resolve the\ndependency.\n\n## the other half\n\nthis convention covers releases a maintainer cuts deliberately. repositories also\npublish a rolling `dev` prerelease on every merge to `main`, which is what the\nexperimental [[release-channel]] serves — the same automation, on a trigger that\nfires continuously rather than on a human decision.\n\n## related\n\n[[testing-and-ci]] covers the build and test side. both live in\n[[dpc-conventions]].\n",
    "title": "Release Automation",
    "type": "concept",
-   "updated": "2026-08-07"
+   "updated": "2026-08-23"
+  },
+  "release-channel": {
+   "backlinks": [
+    "dans-plugin-manager",
+    "moc-conventions-and-process",
+    "release-automation"
+   ],
+   "body": "\nA channel is the answer to \"which build of this plugin should the server get?\"\n[[dans-plugin-manager]] gives each managed plugin one of two, and there are\nexactly two — the enum has no third value and unknown names fall back to stable.\n\n| Channel | What it fetches | Who publishes it |\n|---|---|---|\n| `stable` (default) | The latest published GitHub release | A maintainer, when they cut one |\n| `experimental` | A build of `main`, refreshed on every merge | The repository's CI, as a rolling `dev` prerelease |\n\n## The rolling `dev` prerelease\n\nThe experimental channel is not a different way of reading the release list. It\nreads *one specific release* — a prerelease tagged `dev` that each repository's\nCI overwrites every time a change is merged to `main`. This is the piece that is\nhard to guess\nfrom the outside: \"the dev build\" is a GitHub release like any other, it simply\nnever changes its tag.\n\nThat has a consequence DPM has to work around. Every experimental build carries\nthe same `dev` tag, so tag equality would report \"already up to date\" forever.\nDPM records the version as `dev-<commit>` instead, which is what `/dpm list` and\n`/dpm info` show.\n\nIt also means the stable channel cannot reach these builds even in principle:\nstable resolves through GitHub's `releases/latest`, which excludes prereleases\nby design.\n\n## The choice is sticky\n\n`/dpm get <plugin> --experimental` is not a one-off download. The channel is\nremembered per plugin, so plain `/dpm get` and `/dpm update` keep that plugin on\nexperimental builds until `--stable` is passed. This is the behaviour of a\npackage manager pinning a package to a channel, which is of a piece with the\nrest of DPM's [[dans-plugin-manager|apt-shaped vocabulary]].\n\nThree edges follow from stickiness, and each guards a specific failure:\n\n- **Dependencies keep their own channel.** A dependency pulled in automatically\n  arrives from whatever channel *it* is set to, not the channel of the plugin\n  that required it.\n- **A plugin pinned to experimental stays pinned** even if its repository stops\n  publishing a rolling build. `/dpm update` reports and skips it rather than\n  silently reverting it to releases — a quiet downgrade would be worse than a\n  visible stall.\n- **Removing a plugin resets it to stable**, so a later reinstall does not\n  silently return to unreleased code.\n\n## Why this is the honest default for a community\n\n[[release-automation]] describes the stable path: a maintainer creates a release,\nCI builds it and attaches the jar. That path is deliberate and slow, which is\nright for the servers people actually play on.\n\nThe experimental channel exists because the gap between \"merged\" and \"released\"\nis where most of the useful feedback lives, and a server operator willing to run\nmain-branch code is the best tester the community has. The guide is blunt about\nthe trade — unreleased, unreviewed code that can stop a server from starting —\nand DPM repeats the warning on every switch rather than burying it in docs.\n\nWorth noting for anyone reading DPM's own version numbers: the channel feature\nitself lives on `main` and is in no published DPM release, and DPM publishes no\nrolling build of itself. A jar with the flags has to be built from source.\n",
+   "id": "release-channel",
+   "links": [
+    "dans-plugin-manager",
+    "release-automation"
+   ],
+   "moc": "moc-conventions-and-process",
+   "sourcePath": "notes/concepts/release-channel.md",
+   "sourceUrl": "https://github.com/Dans-Plugins/dpc-zettelkasten/blob/main/notes/concepts/release-channel.md",
+   "sources": [
+    {
+     "claim": "Every managed plugin tracks one of two channels — stable, the latest published GitHub release, or experimental, a build of the plugin's main branch published automatically by the repository's CI as a rolling dev prerelease.",
+     "label": "Dans-Plugin-Manager/USER_GUIDE.md",
+     "lines": "",
+     "path": "USER_GUIDE.md",
+     "ref": "3733eb51df6be11ac0239d7cffcfb2ef72e756a9",
+     "repo": "Dans-Plugins/Dans-Plugin-Manager",
+     "shortRef": "3733eb5",
+     "url": "https://github.com/Dans-Plugins/Dans-Plugin-Manager/blob/3733eb51df6be11ac0239d7cffcfb2ef72e756a9/USER_GUIDE.md"
+    },
+    {
+     "claim": "/dpm get takes --experimental or --stable to switch the named plugins between channels, while /dpm update takes no channel flags and follows whatever channel each plugin is already set to.",
+     "label": "Dans-Plugin-Manager/COMMANDS.md",
+     "lines": "",
+     "path": "COMMANDS.md",
+     "ref": "3733eb51df6be11ac0239d7cffcfb2ef72e756a9",
+     "repo": "Dans-Plugins/Dans-Plugin-Manager",
+     "shortRef": "3733eb5",
+     "url": "https://github.com/Dans-Plugins/Dans-Plugin-Manager/blob/3733eb51df6be11ac0239d7cffcfb2ef72e756a9/COMMANDS.md"
+    },
+    {
+     "claim": "The channel model is an enum of exactly two values, STABLE and EXPERIMENTAL, with unrecognised stored values falling back to STABLE.",
+     "label": "Dans-Plugin-Manager/ReleaseChannel.java",
+     "lines": "",
+     "path": "src/main/java/dansplugins/dpm/objects/ReleaseChannel.java",
+     "ref": "3733eb51df6be11ac0239d7cffcfb2ef72e756a9",
+     "repo": "Dans-Plugins/Dans-Plugin-Manager",
+     "shortRef": "3733eb5",
+     "url": "https://github.com/Dans-Plugins/Dans-Plugin-Manager/blob/3733eb51df6be11ac0239d7cffcfb2ef72e756a9/src/main/java/dansplugins/dpm/objects/ReleaseChannel.java"
+    }
+   ],
+   "summary": "Each managed plugin tracks either published releases or a rolling build of its main branch, and Dan's Plugin Manager remembers the choice per plugin.",
+   "tags": [
+    "dpm",
+    "ecosystem",
+    "ci",
+    "conventions"
+   ],
+   "text": "release channel each managed plugin tracks either published releases or a rolling build of its main branch, and dan's plugin manager remembers the choice per plugin. \na channel is the answer to \"which build of this plugin should the server get?\"\n[[dans-plugin-manager]] gives each managed plugin one of two, and there are\nexactly two — the enum has no third value and unknown names fall back to stable.\n\n| channel | what it fetches | who publishes it |\n|---|---|---|\n| `stable` (default) | the latest published github release | a maintainer, when they cut one |\n| `experimental` | a build of `main`, refreshed on every merge | the repository's ci, as a rolling `dev` prerelease |\n\n## the rolling `dev` prerelease\n\nthe experimental channel is not a different way of reading the release list. it\nreads *one specific release* — a prerelease tagged `dev` that each repository's\nci overwrites every time a change is merged to `main`. this is the piece that is\nhard to guess\nfrom the outside: \"the dev build\" is a github release like any other, it simply\nnever changes its tag.\n\nthat has a consequence dpm has to work around. every experimental build carries\nthe same `dev` tag, so tag equality would report \"already up to date\" forever.\ndpm records the version as `dev-<commit>` instead, which is what `/dpm list` and\n`/dpm info` show.\n\nit also means the stable channel cannot reach these builds even in principle:\nstable resolves through github's `releases/latest`, which excludes prereleases\nby design.\n\n## the choice is sticky\n\n`/dpm get <plugin> --experimental` is not a one-off download. the channel is\nremembered per plugin, so plain `/dpm get` and `/dpm update` keep that plugin on\nexperimental builds until `--stable` is passed. this is the behaviour of a\npackage manager pinning a package to a channel, which is of a piece with the\nrest of dpm's [[dans-plugin-manager|apt-shaped vocabulary]].\n\nthree edges follow from stickiness, and each guards a specific failure:\n\n- **dependencies keep their own channel.** a dependency pulled in automatically\n  arrives from whatever channel *it* is set to, not the channel of the plugin\n  that required it.\n- **a plugin pinned to experimental stays pinned** even if its repository stops\n  publishing a rolling build. `/dpm update` reports and skips it rather than\n  silently reverting it to releases — a quiet downgrade would be worse than a\n  visible stall.\n- **removing a plugin resets it to stable**, so a later reinstall does not\n  silently return to unreleased code.\n\n## why this is the honest default for a community\n\n[[release-automation]] describes the stable path: a maintainer creates a release,\nci builds it and attaches the jar. that path is deliberate and slow, which is\nright for the servers people actually play on.\n\nthe experimental channel exists because the gap between \"merged\" and \"released\"\nis where most of the useful feedback lives, and a server operator willing to run\nmain-branch code is the best tester the community has. the guide is blunt about\nthe trade — unreleased, unreviewed code that can stop a server from starting —\nand dpm repeats the warning on every switch rather than burying it in docs.\n\nworth noting for anyone reading dpm's own version numbers: the channel feature\nitself lives on `main` and is in no published dpm release, and dpm publishes no\nrolling build of itself. a jar with the flags has to be built from source.\n",
+   "title": "Release Channel",
+   "type": "concept",
+   "updated": "2026-08-23"
   },
   "repository-pattern": {
    "backlinks": [
+    "alternate-account-finder",
     "faction",
+    "food-spoilage",
     "jooq-persistence",
     "moc-dans-plugins-community",
     "moc-plugin-architecture",
+    "moc-plugin-ecosystem",
     "service-layer",
     "testing-and-ci",
     "value-class-identifier"
@@ -2372,6 +3029,7 @@
   },
   "service-layer": {
    "backlinks": [
+    "duel",
     "faction",
     "faction-events",
     "law",
@@ -2384,6 +3042,7 @@
     "moc-medieval-factions",
     "moc-plugin-architecture",
     "optimistic-locking",
+    "player-interaction-status",
     "ponder"
    ],
    "body": "\nEvery domain area in [[medieval-factions]] gets a service. The service owns the\nin-memory copy of that area's data, applies the rules, fires [[faction-events]],\nand delegates persistence to a repository. Nothing else in the plugin should\ntouch a repository directly.\n\n## One registry\n\n`Services` is a plain class with fifteen constructor properties — player,\nfaction, law, relationship, claim, lock, interaction, notification, gate, chat,\nduel, potion, teleport, map, and approval request. It is constructed once during\n`onEnable` and hung off the plugin instance as `plugin.services`.\n\nThere is no dependency-injection framework. Wiring is a hundred lines of\n`onEnable` constructing repositories and passing them into services, which for a\nplugin of this size is easier to follow than a container would be.\n\n`mapService` is the only nullable entry: it exists only when an optional\n[[map-integration]] plugin is installed. Its type carries that fact, so callers\nmust handle absence rather than discovering it at runtime.\n\n## Failures are values\n\nMutating methods return `Result4k<T, ServiceFailure>` rather than throwing.\n`ServiceFailure` carries a `type`, a `message`, and the underlying `cause`, and\n`ServiceFailureType` distinguishes nine cases — `NOT_FOUND`, `BAD_REQUEST`,\n`BAD_RESPONSE`, `AUTHENTICATION_REQUIRED`, `AUTHORIZATION`, `RULES_VIOLATION`,\n`DUPLICATE`, `CONFLICT`, and `GENERAL`.\n\nEach service maps exceptions to types in a small private helper — an\n[[optimistic-locking]] failure becomes `CONFLICT`, everything else becomes\n`GENERAL`. A command can then branch on `CONFLICT` and tell the player to try\nagain, which is a very different message from an internal error.\n\n## Read from memory, write through\n\n`MfFactionService` is the fullest example: it loads every [[faction]] into a\n`ConcurrentHashMap` at startup, serves reads from that map, and on write both\npersists through the [[repository-pattern]] and updates the cache. After that\none bulk load, ordinary reads never reach the database — only writes do.\n\n## Related\n\nThe variation between services is mostly how much caching they do.\n`MfLawService` caches nothing and takes only a repository — the minimum a\nservice can be while still owning the failure mapping.\n",
@@ -2430,6 +3089,189 @@
    "title": "Service Layer",
    "type": "concept",
    "updated": "2026-08-07"
+  },
+  "simple-skills": {
+   "backlinks": [
+    "moc-plugin-ecosystem"
+   ],
+   "body": "\nSimpleSkills adds twenty skills — Mining, Farming, Cardio, Dueling and the rest —\nthat level up simply by doing the corresponding thing, and pay out an occasional\nperk once they do. Each is a separate `active` toggle in the config, and an\ninactive skill never registers its listeners at all.\n\n## Counting, not measuring\n\nThe economy is deliberately flat: every qualifying action is worth exactly one\nexperience point. Mining an ore, sprinting a tick, breeding an animal — all one.\nWhat varies is not the reward but the filter, and each skill decides for itself\nwhich events qualify (Mining wants an ore block, broken in survival mode, with a\npickaxe in hand).\n\nLevelling is where the curve lives. The next level costs\n`base × level^factor`, so with the shipped defaults of 10 and 1.2 the first level\nis cheap and the hundredth is not.\n\n## Level as a probability\n\nPerks are not unlocked, they are rolled for. `ChanceCalculator` draws uniformly\nover the configured maximum level and compares against a threshold proportional\nto the player's level in that skill, scaled down by a per-skill nerf factor. The\narithmetic reduces — this is my reading of the formula, not a comment in the\nsource — to a success chance that climbs linearly from nothing at level 0 to\nexactly the nerf factor at the level cap. Progression therefore feels like a\ndial rather than a staircase.\n\n## The one exploit that is guarded\n\nBlock skills refuse experience for a block a player placed, tracked by metadata\non the block itself. The javadoc says why in as many words: silk-touching an ore,\nsetting it back down, and re-mining it would otherwise be infinite experience.\nIt is the only anti-farming guard in the plugin, and its correctness depends on\nlistener registration order, which the code comments call out.\n\n## Related\n\nThe plugin sits on [[ponder]] for its command service and its savable-record\ninterfaces, and ships in the curated jar set on [[dpc-mc-server]] alongside\n[[wild-pets]] and [[food-spoilage]] — standalone plugins that, unlike\n[[fiefs]], extend vanilla rather than [[medieval-factions]].\n",
+   "id": "simple-skills",
+   "links": [
+    "ponder",
+    "dpc-mc-server",
+    "wild-pets",
+    "food-spoilage",
+    "fiefs",
+    "medieval-factions"
+   ],
+   "moc": "moc-plugin-ecosystem",
+   "sourcePath": "notes/concepts/simple-skills.md",
+   "sourceUrl": "https://github.com/Dans-Plugins/dpc-zettelkasten/blob/main/notes/concepts/simple-skills.md",
+   "sources": [
+    {
+     "claim": "Twenty named skills are instantiated at plugin enable, and only those the config marks active register Bukkit listeners.",
+     "label": "SimpleSkills/SimpleSkills.java:166-215",
+     "lines": "166-215",
+     "path": "src/main/java/dansplugins/simpleskills/SimpleSkills.java",
+     "ref": "3350aa18ae484114fb6c21d130d32174050ee1dd",
+     "repo": "Dans-Plugins/SimpleSkills",
+     "shortRef": "3350aa1",
+     "url": "https://github.com/Dans-Plugins/SimpleSkills/blob/3350aa18ae484114fb6c21d130d32174050ee1dd/src/main/java/dansplugins/simpleskills/SimpleSkills.java#L166-L215"
+    },
+    {
+     "claim": "A qualifying action adds exactly one experience point to the skill, with no weighting for what was done.",
+     "label": "SimpleSkills/PlayerRecord.java:131-139",
+     "lines": "131-139",
+     "path": "src/main/java/dansplugins/simpleskills/playerrecord/PlayerRecord.java",
+     "ref": "3350aa18ae484114fb6c21d130d32174050ee1dd",
+     "repo": "Dans-Plugins/SimpleSkills",
+     "shortRef": "3350aa1",
+     "url": "https://github.com/Dans-Plugins/SimpleSkills/blob/3350aa18ae484114fb6c21d130d32174050ee1dd/src/main/java/dansplugins/simpleskills/playerrecord/PlayerRecord.java#L131-L139"
+    },
+    {
+     "claim": "Experience required for the next level is the base requirement multiplied by the current level raised to the power of the increase factor.",
+     "label": "SimpleSkills/ExperienceCalculator.java:8-10",
+     "lines": "8-10",
+     "path": "src/main/java/dansplugins/simpleskills/experience/ExperienceCalculator.java",
+     "ref": "3350aa18ae484114fb6c21d130d32174050ee1dd",
+     "repo": "Dans-Plugins/SimpleSkills",
+     "shortRef": "3350aa1",
+     "url": "https://github.com/Dans-Plugins/SimpleSkills/blob/3350aa18ae484114fb6c21d130d32174050ee1dd/src/main/java/dansplugins/simpleskills/experience/ExperienceCalculator.java#L8-L10"
+    },
+    {
+     "claim": "A perk roll draws uniformly over the configured maximum level and succeeds below a threshold of maxLevel times (level / maxLevel) times a caller-supplied nerf factor.",
+     "label": "SimpleSkills/ChanceCalculator.java:52-63",
+     "lines": "52-63",
+     "path": "src/main/java/dansplugins/simpleskills/chance/ChanceCalculator.java",
+     "ref": "3350aa18ae484114fb6c21d130d32174050ee1dd",
+     "repo": "Dans-Plugins/SimpleSkills",
+     "shortRef": "3350aa1",
+     "url": "https://github.com/Dans-Plugins/SimpleSkills/blob/3350aa18ae484114fb6c21d130d32174050ee1dd/src/main/java/dansplugins/simpleskills/chance/ChanceCalculator.java#L52-L63"
+    },
+    {
+     "claim": "Player-placed blocks are tagged with plugin metadata so block-break skills refuse to grant experience for them, which the class javadoc states closes a silk-touch replace-and-remine exploit.",
+     "label": "SimpleSkills/PlacedBlockListener.java:13-43",
+     "lines": "13-43",
+     "path": "src/main/java/dansplugins/simpleskills/listeners/PlacedBlockListener.java",
+     "ref": "3350aa18ae484114fb6c21d130d32174050ee1dd",
+     "repo": "Dans-Plugins/SimpleSkills",
+     "shortRef": "3350aa1",
+     "url": "https://github.com/Dans-Plugins/SimpleSkills/blob/3350aa18ae484114fb6c21d130d32174050ee1dd/src/main/java/dansplugins/simpleskills/listeners/PlacedBlockListener.java#L13-L43"
+    }
+   ],
+   "summary": "A progression layer where ordinary activities each tick a per-player counter, and the resulting level buys a linearly rising chance of a perk.",
+   "tags": [
+    "simpleskills",
+    "ecosystem",
+    "progression"
+   ],
+   "text": "simpleskills a progression layer where ordinary activities each tick a per-player counter, and the resulting level buys a linearly rising chance of a perk. \nsimpleskills adds twenty skills — mining, farming, cardio, dueling and the rest —\nthat level up simply by doing the corresponding thing, and pay out an occasional\nperk once they do. each is a separate `active` toggle in the config, and an\ninactive skill never registers its listeners at all.\n\n## counting, not measuring\n\nthe economy is deliberately flat: every qualifying action is worth exactly one\nexperience point. mining an ore, sprinting a tick, breeding an animal — all one.\nwhat varies is not the reward but the filter, and each skill decides for itself\nwhich events qualify (mining wants an ore block, broken in survival mode, with a\npickaxe in hand).\n\nlevelling is where the curve lives. the next level costs\n`base × level^factor`, so with the shipped defaults of 10 and 1.2 the first level\nis cheap and the hundredth is not.\n\n## level as a probability\n\nperks are not unlocked, they are rolled for. `chancecalculator` draws uniformly\nover the configured maximum level and compares against a threshold proportional\nto the player's level in that skill, scaled down by a per-skill nerf factor. the\narithmetic reduces — this is my reading of the formula, not a comment in the\nsource — to a success chance that climbs linearly from nothing at level 0 to\nexactly the nerf factor at the level cap. progression therefore feels like a\ndial rather than a staircase.\n\n## the one exploit that is guarded\n\nblock skills refuse experience for a block a player placed, tracked by metadata\non the block itself. the javadoc says why in as many words: silk-touching an ore,\nsetting it back down, and re-mining it would otherwise be infinite experience.\nit is the only anti-farming guard in the plugin, and its correctness depends on\nlistener registration order, which the code comments call out.\n\n## related\n\nthe plugin sits on [[ponder]] for its command service and its savable-record\ninterfaces, and ships in the curated jar set on [[dpc-mc-server]] alongside\n[[wild-pets]] and [[food-spoilage]] — standalone plugins that, unlike\n[[fiefs]], extend vanilla rather than [[medieval-factions]].\n",
+   "title": "SimpleSkills",
+   "type": "concept",
+   "updated": "2026-08-24"
+  },
+  "spatial-value-types": {
+   "backlinks": [
+    "duel",
+    "moc-dans-plugins-community",
+    "moc-plugin-architecture"
+   ],
+   "body": "\nThe records that get persisted do not hold Bukkit objects. The `area` package\nsupplies four plain types — a precise position, a block, a chunk, and a cuboid —\neach carrying a world **UUID** and numbers, and each crossing into Bukkit only\nthrough an explicit named conversion.\n\n## Why a UUID and not a world\n\nA `World` is a live server object; a `UUID` is a value. Storing the identifier\nrather than the reference is what lets these records be written to columns by\n[[jooq-persistence]], survive a restart, and be held across a thread boundary\nwithout violating [[main-thread-safety]].\n\nThe conversions back are correspondingly *nullable*: `toBukkitLocation()` and\n`toBukkitBlock()` resolve the world by UUID and yield null if the server has no\nsuch world loaded. Every caller has to decide what an unresolvable position\nmeans, rather than receiving a stale object.\n\n## The cuboid is derived, not stored\n\n`MfCuboidArea` keeps only two corners and computes everything else — `minPosition`\nand `maxPosition` per axis, height, width, depth, centre, the full block list,\nand a `contains` test. Its `init` block rejects a pair of corners in different\nworlds outright, so a mixed-world area cannot exist even briefly.\n\nIt also carries `distanceSquared`, which clamps the query point onto the box per\naxis before measuring — the distance to the *nearest face*, not to the centre,\nand squared to avoid a square root.\n\n## Who uses them\n\nThese are the vocabulary the rest of the model is written in. A [[gate]] stores\nan `MfCuboidArea` plus a trigger `MfBlockPosition`; a [[locked-block]] is a\nblock position with an owner; a [[duel]] snapshots both participants as\n`MfPosition`, yaw and pitch included, so it can put them back exactly as they\nstood.\n\nAdoption is not uniform. [[claimed-chunk]] predates or sidesteps the pattern —\n`MfClaimedChunk` stores `worldId`, `x` and `z` as loose fields and merely offers\na convenience constructor taking an `MfChunkPosition`. Whether that is history\nor intent is not recorded anywhere in the repository.\n\n## Related\n\nThe same instinct — replace a primitive or a framework object with a small\npurpose-built type — appears at the identity layer as\n[[value-class-identifier]]. Here it buys persistence and thread safety; there it\nbuys type safety between otherwise identical strings.\n",
+   "id": "spatial-value-types",
+   "links": [
+    "jooq-persistence",
+    "main-thread-safety",
+    "gate",
+    "locked-block",
+    "duel",
+    "claimed-chunk",
+    "value-class-identifier"
+   ],
+   "moc": "moc-plugin-architecture",
+   "sourcePath": "notes/concepts/spatial-value-types.md",
+   "sourceUrl": "https://github.com/Dans-Plugins/dpc-zettelkasten/blob/main/notes/concepts/spatial-value-types.md",
+   "sources": [
+    {
+     "claim": "MfPosition holds a world UUID with double x, y and z plus yaw and pitch, and converts to a Bukkit Location only through toBukkitLocation, which returns null when the world is not loaded.",
+     "label": "Medieval-Factions/MfPosition.kt:7-27",
+     "lines": "7-27",
+     "path": "src/main/kotlin/com/dansplugins/factionsystem/area/MfPosition.kt",
+     "ref": "3a51c55366b544d31429fae8bcb64efaf1878e15",
+     "repo": "Dans-Plugins/Medieval-Factions",
+     "shortRef": "3a51c55",
+     "url": "https://github.com/Dans-Plugins/Medieval-Factions/blob/3a51c55366b544d31429fae8bcb64efaf1878e15/src/main/kotlin/com/dansplugins/factionsystem/area/MfPosition.kt#L7-L27"
+    },
+    {
+     "claim": "MfBlockPosition holds a world UUID and integer coordinates, with named conversions to and from a Bukkit Block.",
+     "label": "Medieval-Factions/MfBlockPosition.kt:8-26",
+     "lines": "8-26",
+     "path": "src/main/kotlin/com/dansplugins/factionsystem/area/MfBlockPosition.kt",
+     "ref": "3a51c55366b544d31429fae8bcb64efaf1878e15",
+     "repo": "Dans-Plugins/Medieval-Factions",
+     "shortRef": "3a51c55",
+     "url": "https://github.com/Dans-Plugins/Medieval-Factions/blob/3a51c55366b544d31429fae8bcb64efaf1878e15/src/main/kotlin/com/dansplugins/factionsystem/area/MfBlockPosition.kt#L8-L26"
+    },
+    {
+     "claim": "MfChunkPosition holds a world UUID and an x and z chunk coordinate, converting to and from a Bukkit Chunk.",
+     "label": "Medieval-Factions/MfChunkPosition.kt:7-21",
+     "lines": "7-21",
+     "path": "src/main/kotlin/com/dansplugins/factionsystem/area/MfChunkPosition.kt",
+     "ref": "3a51c55366b544d31429fae8bcb64efaf1878e15",
+     "repo": "Dans-Plugins/Medieval-Factions",
+     "shortRef": "3a51c55",
+     "url": "https://github.com/Dans-Plugins/Medieval-Factions/blob/3a51c55366b544d31429fae8bcb64efaf1878e15/src/main/kotlin/com/dansplugins/factionsystem/area/MfChunkPosition.kt#L7-L21"
+    },
+    {
+     "claim": "MfCuboidArea is two corner block positions and throws IllegalStateException on construction if the two corners are in different worlds.",
+     "label": "Medieval-Factions/MfCuboidArea.kt:10-14",
+     "lines": "10-14",
+     "path": "src/main/kotlin/com/dansplugins/factionsystem/area/MfCuboidArea.kt",
+     "ref": "3a51c55366b544d31429fae8bcb64efaf1878e15",
+     "repo": "Dans-Plugins/Medieval-Factions",
+     "shortRef": "3a51c55",
+     "url": "https://github.com/Dans-Plugins/Medieval-Factions/blob/3a51c55366b544d31429fae8bcb64efaf1878e15/src/main/kotlin/com/dansplugins/factionsystem/area/MfCuboidArea.kt#L10-L14"
+    },
+    {
+     "claim": "Min and max corners, height, width, depth, centre, the block list, contains and distanceSquared are all computed from the two stored corners rather than stored.",
+     "label": "Medieval-Factions/MfCuboidArea.kt:16-87",
+     "lines": "16-87",
+     "path": "src/main/kotlin/com/dansplugins/factionsystem/area/MfCuboidArea.kt",
+     "ref": "3a51c55366b544d31429fae8bcb64efaf1878e15",
+     "repo": "Dans-Plugins/Medieval-Factions",
+     "shortRef": "3a51c55",
+     "url": "https://github.com/Dans-Plugins/Medieval-Factions/blob/3a51c55366b544d31429fae8bcb64efaf1878e15/src/main/kotlin/com/dansplugins/factionsystem/area/MfCuboidArea.kt#L16-L87"
+    },
+    {
+     "claim": "A gate stores its area as an MfCuboidArea and its trigger as an MfBlockPosition.",
+     "label": "Medieval-Factions/MfGate.kt:13-24",
+     "lines": "13-24",
+     "path": "src/main/kotlin/com/dansplugins/factionsystem/gate/MfGate.kt",
+     "ref": "3a51c55366b544d31429fae8bcb64efaf1878e15",
+     "repo": "Dans-Plugins/Medieval-Factions",
+     "shortRef": "3a51c55",
+     "url": "https://github.com/Dans-Plugins/Medieval-Factions/blob/3a51c55366b544d31429fae8bcb64efaf1878e15/src/main/kotlin/com/dansplugins/factionsystem/gate/MfGate.kt#L13-L24"
+    },
+    {
+     "claim": "MfClaimedChunk stores worldId, x and z as its own fields rather than an MfChunkPosition, offering constructors that accept a Bukkit Chunk or an MfChunkPosition.",
+     "label": "Medieval-Factions/MfClaimedChunk.kt:8-17",
+     "lines": "8-17",
+     "path": "src/main/kotlin/com/dansplugins/factionsystem/claim/MfClaimedChunk.kt",
+     "ref": "3a51c55366b544d31429fae8bcb64efaf1878e15",
+     "repo": "Dans-Plugins/Medieval-Factions",
+     "shortRef": "3a51c55",
+     "url": "https://github.com/Dans-Plugins/Medieval-Factions/blob/3a51c55366b544d31429fae8bcb64efaf1878e15/src/main/kotlin/com/dansplugins/factionsystem/claim/MfClaimedChunk.kt#L8-L17"
+    }
+   ],
+   "summary": "Positions are stored as plain records holding a world UUID and numbers, never as live Bukkit objects, and are converted at the boundary.",
+   "tags": [
+    "medieval-factions",
+    "architecture",
+    "domain-model"
+   ],
+   "text": "spatial value types positions are stored as plain records holding a world uuid and numbers, never as live bukkit objects, and are converted at the boundary. \nthe records that get persisted do not hold bukkit objects. the `area` package\nsupplies four plain types — a precise position, a block, a chunk, and a cuboid —\neach carrying a world **uuid** and numbers, and each crossing into bukkit only\nthrough an explicit named conversion.\n\n## why a uuid and not a world\n\na `world` is a live server object; a `uuid` is a value. storing the identifier\nrather than the reference is what lets these records be written to columns by\n[[jooq-persistence]], survive a restart, and be held across a thread boundary\nwithout violating [[main-thread-safety]].\n\nthe conversions back are correspondingly *nullable*: `tobukkitlocation()` and\n`tobukkitblock()` resolve the world by uuid and yield null if the server has no\nsuch world loaded. every caller has to decide what an unresolvable position\nmeans, rather than receiving a stale object.\n\n## the cuboid is derived, not stored\n\n`mfcuboidarea` keeps only two corners and computes everything else — `minposition`\nand `maxposition` per axis, height, width, depth, centre, the full block list,\nand a `contains` test. its `init` block rejects a pair of corners in different\nworlds outright, so a mixed-world area cannot exist even briefly.\n\nit also carries `distancesquared`, which clamps the query point onto the box per\naxis before measuring — the distance to the *nearest face*, not to the centre,\nand squared to avoid a square root.\n\n## who uses them\n\nthese are the vocabulary the rest of the model is written in. a [[gate]] stores\nan `mfcuboidarea` plus a trigger `mfblockposition`; a [[locked-block]] is a\nblock position with an owner; a [[duel]] snapshots both participants as\n`mfposition`, yaw and pitch included, so it can put them back exactly as they\nstood.\n\nadoption is not uniform. [[claimed-chunk]] predates or sidesteps the pattern —\n`mfclaimedchunk` stores `worldid`, `x` and `z` as loose fields and merely offers\na convenience constructor taking an `mfchunkposition`. whether that is history\nor intent is not recorded anywhere in the repository.\n\n## related\n\nthe same instinct — replace a primitive or a framework object with a small\npurpose-built type — appears at the identity layer as\n[[value-class-identifier]]. here it buys persistence and thread safety; there it\nbuys type safety between otherwise identical strings.\n",
+   "title": "Spatial Value Types",
+   "type": "concept",
+   "updated": "2026-08-14"
   },
   "testing-and-ci": {
    "backlinks": [
@@ -2542,7 +3384,8 @@
     "faction",
     "moc-dans-plugins-community",
     "moc-plugin-architecture",
-    "repository-pattern"
+    "repository-pattern",
+    "spatial-value-types"
    ],
    "body": "\n`MfFactionId`, `MfPlayerId`, `MfLawId`, `MfGateId`, `MfLockedBlockId`,\n`MfDuelId`, `MfFactionRoleId`, `MfApprovalRequestId`,\n`MfFactionRelationshipId` — all nine identifiers in the plugin are\n`@JvmInline value class` wrappers around a `String`, with no exceptions.\n\n## What it buys\n\nAt compile time these are distinct types: a function taking an `MfFactionId`\ncannot be handed an `MfPlayerId`, even though both are strings underneath. In a\ncodebase where nearly every method signature takes at least one identifier, that\nis the difference between a compiler error and a bug that only appears when two\nUUIDs get swapped.\n\nAt runtime, Kotlin erases the wrapper. An `MfFactionId` in a local variable *is*\na `String` — no allocation, no indirection. The safety is free.\n\n## Where the boundary lives\n\nEach id class owns its own conversions, which keeps the awkward casts in one\nplace:\n\n- `MfFactionId.generate()` produces a fresh random UUID string.\n- `MfPlayerId.fromBukkitPlayer()` and `.toBukkitPlayer()` bridge to Bukkit's\n  `OfflinePlayer`, so the rest of the plugin can pass a player identity around\n  without depending on the Bukkit API.\n\nThat second pair is the more interesting one: it means the domain model refers\nto players by a value it owns, not by a Bukkit object whose lifecycle the server\ncontrols.\n\n## The catch\n\nValue classes and Java interoperation do not always agree, which is why domain\nclasses are peppered with `@get:JvmName(\"getId\")`. Without it, Kotlin mangles\nthe getter name for a value-class-typed property, and Java callers — including\n[[expansion-plugin|expansions]] written in Java such as [[fiefs]] — cannot see\nit. The annotation is the tax for keeping the public API usable from Java.\n\n## Related\n\nThe unwrapping to a plain column value happens in the [[repository-pattern]]\nimplementations, so the database sees only strings.\n",
    "id": "value-class-identifier",
@@ -2591,6 +3434,7 @@
    "backlinks": [
     "claimed-chunk",
     "demesne-limit",
+    "faction-chat-channel",
     "faction-flag",
     "faction-power",
     "faction-relationship",
@@ -2642,6 +3486,83 @@
    "title": "Vassalage",
    "type": "concept",
    "updated": "2026-08-07"
+  },
+  "wild-pets": {
+   "backlinks": [
+    "moc-plugin-ecosystem",
+    "simple-skills"
+   ],
+   "body": "\nVanilla Minecraft tames a handful of species. Wild Pets replaces that with a\nlookup table: each entity type gets a row saying what taming it costs and how\nlikely an attempt is to work — and a type with no row still gets one.\n\n## A row per entity type\n\nAn entity configuration is five fields: type name, success chance, required\nitem, item amount, and an enabled flag. The plugin ships 81 of them, from\npassive animals through hostile mobs to the Ender Dragon and the Wither. Every\nshipped row is enabled at a 0.5 chance, so the difference between mobs is\nentirely the item and the quantity — 8 sweet berries for a fox, 64 ender eyes\nfor the Ender Dragon. The `enabled` flag is the per-type off switch.\n\n## A fallback that is never a wall\n\nLookup compares the entity's type name against each row, case-insensitively.\nOn no match it returns a default configuration built inline: 0.25 chance, 10\nwheat. An unlisted entity type is therefore *harder* to tame than anything in\nthe table, but never refused. Nothing in the repository explains the choice of\n0.25 or of wheat, so treat those numbers as unexplained.\n\nThe consequence is that a key which cannot match degrades silently rather than\nerroring. The shipped table contains `Wandering Trader` — with a space, which\nan enum constant name cannot contain — and rows like `Piglin_Baby` and\n`Chicken_Jockey` that name variants rather than types. My reading is that these\nrows are unreachable and those mobs fall through to the default; I have not run\na server to confirm it.\n\n## The attempt is a transaction\n\nRight-clicking in taming mode checks the enabled flag, the owner's pet limit,\nand the held stack against the row's material and amount, then rolls. The stack\nis decremented by the required amount on failure as well as on success, so a\nfailed attempt has a price.\n\n## Related\n\nTaming is entered as a mode — `/wp tame` flags the player and the next\nright-click supplies the target — which is the same shape as the flagship's\n[[player-interaction-status]]. A tamed pet carries an owner plus an access list\nand can be locked against everyone else, which is [[locked-block]]'s design\napplied to a mob rather than a chest.\n",
+   "id": "wild-pets",
+   "links": [
+    "player-interaction-status",
+    "locked-block"
+   ],
+   "moc": "moc-plugin-ecosystem",
+   "sourcePath": "notes/concepts/wild-pets.md",
+   "sourceUrl": "https://github.com/Dans-Plugins/dpc-zettelkasten/blob/main/notes/concepts/wild-pets.md",
+   "sources": [
+    {
+     "claim": "An entity configuration is five immutable fields — type name, chance to succeed, required taming item, taming item amount, and an enabled flag.",
+     "label": "Wild-Pets/EntityConfig.java:8-21",
+     "lines": "8-21",
+     "path": "src/main/java/dansplugins/wildpets/config/EntityConfig.java",
+     "ref": "374065a04fdb5865fc782a1424b82e3b951881b3",
+     "repo": "Dans-Plugins/Wild-Pets",
+     "shortRef": "374065a",
+     "url": "https://github.com/Dans-Plugins/Wild-Pets/blob/374065a04fdb5865fc782a1424b82e3b951881b3/src/main/java/dansplugins/wildpets/config/EntityConfig.java#L8-L21"
+    },
+    {
+     "claim": "The built-in table holds 81 entity configurations across passive, neutral, hostile and boss mobs, every one enabled with a chance to succeed of 0.5, with Endermite listed twice.",
+     "label": "Wild-Pets/EntityConfigService.java:42-137",
+     "lines": "42-137",
+     "path": "src/main/java/dansplugins/wildpets/config/EntityConfigService.java",
+     "ref": "374065a04fdb5865fc782a1424b82e3b951881b3",
+     "repo": "Dans-Plugins/Wild-Pets",
+     "shortRef": "374065a",
+     "url": "https://github.com/Dans-Plugins/Wild-Pets/blob/374065a04fdb5865fc782a1424b82e3b951881b3/src/main/java/dansplugins/wildpets/config/EntityConfigService.java#L42-L137"
+    },
+    {
+     "claim": "A configuration is selected by comparing the entity's type name case-insensitively against each row's type, and the default configuration is returned when no row matches.",
+     "label": "Wild-Pets/EntityConfigService.java:23-32",
+     "lines": "23-32",
+     "path": "src/main/java/dansplugins/wildpets/config/EntityConfigService.java",
+     "ref": "374065a04fdb5865fc782a1424b82e3b951881b3",
+     "repo": "Dans-Plugins/Wild-Pets",
+     "shortRef": "374065a",
+     "url": "https://github.com/Dans-Plugins/Wild-Pets/blob/374065a04fdb5865fc782a1424b82e3b951881b3/src/main/java/dansplugins/wildpets/config/EntityConfigService.java#L23-L32"
+    },
+    {
+     "claim": "The default configuration is constructed inline as type \"default\" with a 0.25 chance to succeed, 10 wheat, and enabled true.",
+     "label": "Wild-Pets/EntityConfigService.java:164-166",
+     "lines": "164-166",
+     "path": "src/main/java/dansplugins/wildpets/config/EntityConfigService.java",
+     "ref": "374065a04fdb5865fc782a1424b82e3b951881b3",
+     "repo": "Dans-Plugins/Wild-Pets",
+     "shortRef": "374065a",
+     "url": "https://github.com/Dans-Plugins/Wild-Pets/blob/374065a04fdb5865fc782a1424b82e3b951881b3/src/main/java/dansplugins/wildpets/config/EntityConfigService.java#L164-L166"
+    },
+    {
+     "claim": "A taming attempt is refused when the entity's configuration is disabled or the player is at the pet limit, requires the configured material and amount in the main hand, and removes that amount from the held stack whether the roll succeeds or fails.",
+     "label": "Wild-Pets/InteractionHandler.java:83-136",
+     "lines": "83-136",
+     "path": "src/main/java/dansplugins/wildpets/listeners/InteractionHandler.java",
+     "ref": "374065a04fdb5865fc782a1424b82e3b951881b3",
+     "repo": "Dans-Plugins/Wild-Pets",
+     "shortRef": "374065a",
+     "url": "https://github.com/Dans-Plugins/Wild-Pets/blob/374065a04fdb5865fc782a1424b82e3b951881b3/src/main/java/dansplugins/wildpets/listeners/InteractionHandler.java#L83-L136"
+    }
+   ],
+   "summary": "A standalone plugin that turns taming into a per-entity-type recipe — a required item, a quantity, and a success chance — so that any mob can become a pet.",
+   "tags": [
+    "wild-pets",
+    "ecosystem",
+    "configuration"
+   ],
+   "text": "wild pets a standalone plugin that turns taming into a per-entity-type recipe — a required item, a quantity, and a success chance — so that any mob can become a pet. \nvanilla minecraft tames a handful of species. wild pets replaces that with a\nlookup table: each entity type gets a row saying what taming it costs and how\nlikely an attempt is to work — and a type with no row still gets one.\n\n## a row per entity type\n\nan entity configuration is five fields: type name, success chance, required\nitem, item amount, and an enabled flag. the plugin ships 81 of them, from\npassive animals through hostile mobs to the ender dragon and the wither. every\nshipped row is enabled at a 0.5 chance, so the difference between mobs is\nentirely the item and the quantity — 8 sweet berries for a fox, 64 ender eyes\nfor the ender dragon. the `enabled` flag is the per-type off switch.\n\n## a fallback that is never a wall\n\nlookup compares the entity's type name against each row, case-insensitively.\non no match it returns a default configuration built inline: 0.25 chance, 10\nwheat. an unlisted entity type is therefore *harder* to tame than anything in\nthe table, but never refused. nothing in the repository explains the choice of\n0.25 or of wheat, so treat those numbers as unexplained.\n\nthe consequence is that a key which cannot match degrades silently rather than\nerroring. the shipped table contains `wandering trader` — with a space, which\nan enum constant name cannot contain — and rows like `piglin_baby` and\n`chicken_jockey` that name variants rather than types. my reading is that these\nrows are unreachable and those mobs fall through to the default; i have not run\na server to confirm it.\n\n## the attempt is a transaction\n\nright-clicking in taming mode checks the enabled flag, the owner's pet limit,\nand the held stack against the row's material and amount, then rolls. the stack\nis decremented by the required amount on failure as well as on success, so a\nfailed attempt has a price.\n\n## related\n\ntaming is entered as a mode — `/wp tame` flags the player and the next\nright-click supplies the target — which is the same shape as the flagship's\n[[player-interaction-status]]. a tamed pet carries an owner plus an access list\nand can be locked against everyone else, which is [[locked-block]]'s design\napplied to a mob rather than a chest.\n",
+   "title": "Wild Pets",
+   "type": "concept",
+   "updated": "2026-08-24"
   }
  }
 }

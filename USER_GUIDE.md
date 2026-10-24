@@ -59,7 +59,7 @@ For the actual source, follow the permalinks.
 **Not current by default.** The vendored snapshot is fixed at the commit it was
 synced from. Run `npm run sync` to refresh it.
 
-**Not exhaustive.** 45 notes over roughly forty repositories. Absence of a note
+**Not exhaustive.** 55 notes over roughly forty repositories. Absence of a note
 means nobody has written one — not that the thing does not exist.
 
 **Not a substitute for the pin.** A citation is true *of the commit it names*.

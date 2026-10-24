@@ -20,7 +20,7 @@ The server reports which source it used, and which commit of the collection it
 is serving, on stderr at startup:
 
 ```
-dpc-mcp-server 0.1.0 ready — 45 notes, 90 citations across 9 repositories (vendored copy @ 7c9b5f4eaa)
+dpc-mcp-server 0.1.0 ready — 55 notes, 144 citations across 14 repositories (vendored copy @ 188c93fefb)
 ```
 
 The usage-reporting notice (see [Usage reporting](#usage-reporting)) follows it
