@@ -29,15 +29,15 @@ are all the query contains.
 ```json
 {
   "query": "power",
-  "matched": 12,
+  "matched": 17,
   "returned": 10,
   "results": [
     { "id": "faction-power", "title": "Faction Power", "type": "concept",
       "moc": "moc-faction-domain-model", "summary": "…", "tags": ["…"],
-      "linkCount": 5, "backlinkCount": 11, "sourceCount": 2,
+      "linkCount": 6, "backlinkCount": 10, "sourceCount": 2,
       "links": ["…"] }
   ],
-  "hint": "2 further matches not shown; raise \"limit\" or narrow the query."
+  "hint": "7 further matches not shown; raise \"limit\" or narrow the query."
 }
 ```
 
@@ -60,7 +60,7 @@ with near-miss suggestions rather than an empty result.
   "id": "demesne-limit",
   "title": "Demesne Limit",
   "moc": "moc-faction-domain-model",
-  "links": ["claimed-chunk", "faction-power", "vassalage"],
+  "links": ["claimed-chunk", "faction-power", "vassalage", "player-power"],
   "backlinks": ["faction-power", "player-power", "…"],
   "sources": [
     { "repo": "Dans-Plugins/Medieval-Factions",
