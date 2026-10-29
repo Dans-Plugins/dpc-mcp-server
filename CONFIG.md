@@ -102,6 +102,13 @@ rather than buffered, and an `MCP-Protocol-Version` header naming a version this
 server does not speak is refused with 400 rather than answered in a dialect
 neither side agreed to.
 
+A proxy in front has to pass a `POST /mcp` through with its headers intact. A
+`Content-Type` other than `application/json` is refused with 415, and an
+`Accept` that names neither `application/json` nor `*/*` with 406, because
+every reply is JSON. (A missing `Accept` is fine.) Any path other than `/mcp` and `/healthz` is 404. Every
+refusal, whatever its status, carries a JSON-RPC error body saying what was
+wrong, not an HTML page.
+
 ## Shutting down
 
 `SIGTERM` and `SIGINT` both end the server with exit status 0, on either

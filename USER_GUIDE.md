@@ -59,8 +59,9 @@ For the actual source, follow the permalinks.
 **Not current by default.** The vendored snapshot is fixed at the commit it was
 synced from. Run `npm run sync` to refresh it.
 
-**Not exhaustive.** 55 notes over roughly forty repositories. Absence of a note
-means nobody has written one — not that the thing does not exist.
+**Not exhaustive.** 55 notes, citing 14 of the organization's repositories.
+Absence of a note means nobody has written one — not that the thing does not
+exist.
 
 **Not a substitute for the pin.** A citation is true *of the commit it names*.
 Code may have moved since; the zettelkasten's own `check_sources.py` reports
