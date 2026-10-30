@@ -58,7 +58,7 @@ src/usage-reporting.json   Its defaults, including the program's key
 tools/sync.js     Refreshes vendor/ from the published collection
 tools/vendor-trace-client.js   Refreshes the vendored trace client
 vendor/           The committed snapshot — generated, do not hand-edit
-test/run.js       Data, raw protocol, and live-client tests
+test/run.js       Data, raw protocol, live-client, and usage-reporting tests
 ```
 
 Both transports answer through the same `Server.respond()`. A change to how a
@@ -91,7 +91,7 @@ exercised through the real SDK.
 npm test
 ```
 
-Three layers, all of which must pass. The runner sets
+Four layers, all of which must pass. The runner sets
 `TRACE_USAGE_REPORTING=off` for every server it starts, so a test run never
 reports to the real trace server; the usage-reporting tests point theirs at a
 stub on loopback instead.
@@ -104,6 +104,11 @@ stub on loopback instead.
 - **Live client** — a real session with `@modelcontextprotocol/sdk`, on stdio
   and over HTTP. This server implements the protocol by hand, so this layer is
   the actual claim.
+- **Usage reporting** — the opt-out order (environment, then
+  `src/usage-reporting.json`, then a missing key), the notice on stderr with
+  stdout still pure JSON-RPC, the events a real session sends to a stub on
+  loopback, where the install ID is kept, and that `vendor/trace-client.js` is exactly what its TypeScript
+  source derives to.
 
 If you change `src/protocol.js` or `src/http.js`, the live-client layer is what
 proves you did not break it. Do not skip it.
