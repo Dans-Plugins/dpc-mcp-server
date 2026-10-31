@@ -131,6 +131,17 @@ async function rawTests() {
   check("a blank search query is an invalid-params error",
     r.msgs[1].error && r.msgs[1].error.code === -32602, JSON.stringify(r.msgs[1]).slice(0, 120));
 
+  r = await rawSession([init, { jsonrpc: "2.0", id: 6, method: "tools/call", params: { name: "graphql", arguments: { query: "" } } }]);
+  check("a blank graphql query is an invalid-params error",
+    r.msgs[1].error && r.msgs[1].error.code === -32602, JSON.stringify(r.msgs[1]).slice(0, 120));
+
+  // The schema caps limit at 50, but nothing stops a client sending more; a
+  // stopword-only query matches every note, so the cap is what decides the count.
+  r = await rawSession([init, { jsonrpc: "2.0", id: 6, method: "tools/call", params: { name: "search_notes", arguments: { query: "the", limit: 100 } } }]);
+  const capped = JSON.parse(r.msgs[1].result.content[0].text);
+  check("a search_notes limit above 50 is capped at 50",
+    capped.returned === Math.min(capped.matched, 50), `${capped.returned} of ${capped.matched}`);
+
   r = await rawSession([
     { jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "t", version: "0" } } },
   ]);
@@ -216,6 +227,11 @@ async function clientTests() {
   check("a tag alone is enough for search_notes to find a note",
     c.json.results.some((n) => n.id === "main-thread-safety"), c.json.results.map((n) => n.id).join(", "));
 
+  // Every word here is a stopword; dropping them all would leave nothing to match.
+  c = await call("search_notes", { query: "what is the" });
+  check("a query made only of stopwords still finds notes",
+    c.json.matched > 0, String(c.json.matched));
+
   c = await call("search_notes", { query: "power", limit: 1 });
   check("search_notes says how many matches a limit hid",
     c.json.returned === 1 && c.json.matched > 1 && /raise "limit"/.test(c.json.hint || ""), JSON.stringify(c.json.hint));
@@ -228,6 +244,8 @@ async function clientTests() {
 
   c = await call("get_note", { id: "does-not-exist" });
   check("get_note flags an unknown id as an error", c.r.isError === true, JSON.stringify(c.r.isError));
+  check("get_note points at search_notes when no id is close",
+    /Use search_notes to find one/.test(c.body), c.body.slice(0, 120));
 
   c = await call("get_note", { id: "power" });
   check("get_note suggests ids that contain an unknown one",
