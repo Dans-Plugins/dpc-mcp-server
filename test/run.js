@@ -127,6 +127,11 @@ async function rawTests() {
   r = await rawSession([init, { jsonrpc: "2.0", id: 5, method: "tools/call", params: { name: "nope", arguments: {} } }]);
   check("unknown tool is an error", !!r.msgs[1].error, JSON.stringify(r.msgs[1]).slice(0, 120));
 
+  r = await rawSession([init, { jsonrpc: "2.0", id: 5, method: "tools/call", params: { name: "constructor", arguments: {} } }]);
+  check("a tool called constructor is an unknown tool",
+    r.msgs[1].error && r.msgs[1].error.code === -32602 && /Unknown tool/.test(r.msgs[1].error.message),
+    JSON.stringify(r.msgs[1]).slice(0, 120));
+
   r = await rawSession([init, { jsonrpc: "2.0", id: 6, method: "tools/call", params: { name: "search_notes", arguments: { query: "  " } } }]);
   check("a blank search query is an invalid-params error",
     r.msgs[1].error && r.msgs[1].error.code === -32602, JSON.stringify(r.msgs[1]).slice(0, 120));

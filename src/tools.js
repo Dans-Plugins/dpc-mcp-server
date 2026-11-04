@@ -298,14 +298,13 @@ function build(engine, source) {
     },
   ];
 
-  const byName = {};
-  for (const t of tools) byName[t.name] = t;
+  const byName = new Map(tools.map((t) => [t.name, t]));
 
   return {
     listTools: () =>
       tools.map((t) => ({ name: t.name, description: t.description, inputSchema: t.inputSchema })),
     callTool: async (name, args) => {
-      const tool = byName[name];
+      const tool = byName.get(name);
       if (!tool) throw invalid(`Unknown tool: ${name}. Available: ${tools.map((t) => t.name).join(", ")}`);
       return tool.handler(args);
     },
