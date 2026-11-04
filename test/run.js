@@ -127,6 +127,11 @@ async function rawTests() {
   r = await rawSession([init, { jsonrpc: "2.0", id: 5, method: "tools/call", params: { name: "nope", arguments: {} } }]);
   check("unknown tool is an error", !!r.msgs[1].error, JSON.stringify(r.msgs[1]).slice(0, 120));
 
+  r = await rawSession([init, { jsonrpc: "2.0", id: 5, method: "tools/call", params: { name: "constructor", arguments: {} } }]);
+  check("a tool called constructor is an unknown tool",
+    r.msgs[1].error && r.msgs[1].error.code === -32602 && /Unknown tool/.test(r.msgs[1].error.message),
+    JSON.stringify(r.msgs[1]).slice(0, 120));
+
   r = await rawSession([init, { jsonrpc: "2.0", id: 6, method: "tools/call", params: { name: "search_notes", arguments: { query: "  " } } }]);
   check("a blank search query is an invalid-params error",
     r.msgs[1].error && r.msgs[1].error.code === -32602, JSON.stringify(r.msgs[1]).slice(0, 120));
@@ -134,6 +139,11 @@ async function rawTests() {
   r = await rawSession([init, { jsonrpc: "2.0", id: 6, method: "tools/call", params: { name: "graphql", arguments: { query: "" } } }]);
   check("a blank graphql query is an invalid-params error",
     r.msgs[1].error && r.msgs[1].error.code === -32602, JSON.stringify(r.msgs[1]).slice(0, 120));
+
+  r = await rawSession([init, { jsonrpc: "2.0", id: 6, method: "resources/read", params: { uri: "dpc-zettelkasten://note/%E0%A4" } }]);
+  check("a resource uri with a malformed escape is an unknown id",
+    r.msgs[1].error && r.msgs[1].error.code === -32602 && /No note with id/.test(r.msgs[1].error.message),
+    JSON.stringify(r.msgs[1]).slice(0, 120));
 
   // The schema caps limit at 50, but nothing stops a client sending more; a
   // stopword-only query matches every note, so the cap is what decides the count.
@@ -251,6 +261,19 @@ async function clientTests() {
   check("get_note suggests ids that contain an unknown one",
     c.r.isError === true && c.body.includes("faction-power") && c.body.includes("player-power"), c.body.slice(0, 120));
 
+  // These ids exist on any plain object by inheritance, so a lookup that does
+  // not check for an own property finds them. That fails as a protocol error,
+  // which `call` rejects on; catching it keeps the failure a named check.
+  const attempt = (name, args) => call(name, args).catch((e) => ({ r: {}, body: e.message }));
+  for (const id of ["constructor", "__proto__"]) {
+    c = await attempt("get_note", { id });
+    check(`get_note treats ${id} as an unknown id`,
+      c.r.isError === true && /No note with id/.test(c.body), c.body.slice(0, 120));
+    c = await attempt("get_citations", { id });
+    check(`get_citations treats ${id} as an unknown id`,
+      c.r.isError === true && /No note with id/.test(c.body), c.body.slice(0, 120));
+  }
+
   c = await call("list_maps", {});
   check("list_maps returns the hierarchy", c.json && c.json.maps.length === 7, c.json && String(c.json.maps.length));
   check("list_maps reports which commit of the collection it served",
@@ -313,6 +336,11 @@ async function clientTests() {
   let threw = false;
   try { await client.readResource({ uri: "dpc-zettelkasten://note/nope" }); } catch (e) { threw = true; }
   check("reading an unknown resource errors", threw);
+
+  let refused = null;
+  try { await client.readResource({ uri: "dpc-zettelkasten://note/constructor" }); } catch (e) { refused = e; }
+  check("reading a resource treats constructor as an unknown id",
+    refused && refused.code === -32602 && /No note with id/.test(refused.message), refused && refused.message);
 
   await client.close();
 }

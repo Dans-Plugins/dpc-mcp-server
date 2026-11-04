@@ -248,4 +248,5 @@ dpc-zettelkasten://note/<id>
 
 Reading one returns `text/markdown` — the note's body with frontmatter
 reconstructed above it, citations included — so a client can attach a note to a
-conversation without spending a tool call.
+conversation without spending a tool call. An unknown id is a JSON-RPC `-32602`
+error.

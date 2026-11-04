@@ -224,8 +224,11 @@ async function main(argv) {
         e.code = -32602;
         throw e;
       }
-      const id = decodeURIComponent(uri.slice(prefix.length));
-      const note = notes[id];
+      let id = uri.slice(prefix.length);
+      // An escape that does not decode cannot name a note, so it is answered
+      // the way any other unknown id is, rather than as a server failure.
+      try { id = decodeURIComponent(id); } catch (e) { /* keep it as sent */ }
+      const note = tools.lookup(id);
       if (!note) {
         const e = new Error(`No note with id "${id}"`);
         e.code = -32602;

@@ -77,6 +77,12 @@ All notable changes to this project are documented here.
   it, it stopped `que` from matching `query` or `unique`. An unreachable
   Cyrillic entry, which the ASCII-only tokenizer could never produce, is gone
   as well.
+- `get_note`, `get_citations`, and `resources/read` now answer an id like
+  `constructor` or `__proto__` as the unknown id it is. Those names exist on
+  any plain object by inheritance, so the lookup found them and the call failed
+  as an internal protocol error with no way to recover. A resource uri whose
+  percent-escape does not decode gets the same unknown-id answer, and
+  `tools/call` answers a tool named `constructor` as an unknown tool.
 
 ## [0.1.0] - 2026-08-08
 
