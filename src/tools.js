@@ -42,6 +42,10 @@ function build(engine, source) {
   const meta = engine.meta;
   const ids = Object.keys(notes);
 
+  // `notes` is a plain object parsed from JSON, so indexing it with a caller's
+  // id also finds what it inherits: "constructor" would come back as a note.
+  const lookup = (id) => (Object.hasOwn(notes, id) ? notes[id] : undefined);
+
   const brief = (n) => ({
     id: n.id,
     title: n.title,
@@ -156,7 +160,7 @@ function build(engine, source) {
         required: ["id"],
       },
       handler: (a) => {
-        const n = notes[a.id];
+        const n = lookup(a.id);
         if (!n) {
           const near = ids.filter((i) => i.includes(String(a.id || "").toLowerCase())).slice(0, 8);
           return text(
@@ -225,8 +229,9 @@ function build(engine, source) {
       },
       handler: (a) => {
         let rows = [];
-        const pool = a.id ? (notes[a.id] ? [notes[a.id]] : null) : ids.map((i) => notes[i]);
-        if (pool === null) return text(`No note with id "${a.id}".`, true);
+        const one = a.id ? lookup(a.id) : null;
+        if (a.id && !one) return text(`No note with id "${a.id}".`, true);
+        const pool = one ? [one] : ids.map((i) => notes[i]);
         for (const n of pool) {
           for (const s of n.sources) {
             if (a.repo && !s.repo.toLowerCase().includes(String(a.repo).toLowerCase())) continue;
@@ -304,6 +309,7 @@ function build(engine, source) {
       if (!tool) throw invalid(`Unknown tool: ${name}. Available: ${tools.map((t) => t.name).join(", ")}`);
       return tool.handler(args);
     },
+    lookup,
     brief,
     full,
   };
