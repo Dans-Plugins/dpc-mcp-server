@@ -26,6 +26,10 @@ question beats one matching a single word loudly. Common filler words ("how",
 "much", "the", …) and single characters are dropped before scoring, unless they
 are all the query contains.
 
+A blank `query`, or a `type` that is neither `concept` nor `moc`, is a JSON-RPC
+`-32602` error. A `limit` outside 1–50 is clamped to that range rather than
+refused, and one that is `0` or not a number means the default.
+
 ```json
 {
   "query": "power",
@@ -53,7 +57,9 @@ One note in full.
 
 Returns the Markdown body, the note's links and backlinks, and every citation
 with a permalink pinned to a commit SHA. An unknown id comes back as an error
-with near-miss suggestions rather than an empty result.
+with near-miss suggestions, or a pointer to `search_notes` when nothing is
+close, rather than an empty result. A missing or blank `id` is a JSON-RPC
+`-32602` error.
 
 ```json
 {
@@ -124,7 +130,7 @@ The sources of truth themselves, filterable.
 | `path` | string | no | Substring of the cited file path. |
 
 Use it to check whether a claim is supported, or to find every note grounded in
-a particular file.
+a particular file. An unknown `id` is answered the way `get_note` answers one.
 
 ```json
 {
@@ -248,5 +254,5 @@ dpc-zettelkasten://note/<id>
 
 Reading one returns `text/markdown` — the note's body with frontmatter
 reconstructed above it, citations included — so a client can attach a note to a
-conversation without spending a tool call. An unknown id is a JSON-RPC `-32602`
-error.
+conversation without spending a tool call. An unknown id, or a `uri` that is not
+one of these, is a JSON-RPC `-32602` error.

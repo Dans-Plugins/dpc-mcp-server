@@ -219,7 +219,7 @@ async function main(argv) {
 
     readResource: (uri) => {
       const prefix = `${RESOURCE_SCHEME}://note/`;
-      if (!uri.startsWith(prefix)) {
+      if (typeof uri !== "string" || !uri.startsWith(prefix)) {
         const e = new Error(`Unsupported uri: ${uri}. Expected ${prefix}<id>`);
         e.code = -32602;
         throw e;

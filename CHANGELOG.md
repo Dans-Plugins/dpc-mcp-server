@@ -83,6 +83,14 @@ All notable changes to this project are documented here.
   as an internal protocol error with no way to recover. A resource uri whose
   percent-escape does not decode gets the same unknown-id answer, and
   `tools/call` answers a tool named `constructor` as an unknown tool.
+- Malformed arguments now get an answer a model can act on. A `get_note` call
+  with a missing or blank `id` is a `-32602` error, where it used to offer the
+  first eight ids as near misses of nothing. A `search_notes` `type` outside the
+  enum is a `-32602` error rather than an empty result, and a `limit` that is
+  not a number means the default rather than returning nothing with every match
+  reported as hidden. `get_citations` gives the same recovery hint as `get_note`
+  for an unknown id, and a non-string `uri` to `resources/read` is a `-32602`
+  error rather than an internal failure.
 
 ## [0.1.0] - 2026-08-08
 

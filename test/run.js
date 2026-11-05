@@ -140,6 +140,24 @@ async function rawTests() {
   check("a blank graphql query is an invalid-params error",
     r.msgs[1].error && r.msgs[1].error.code === -32602, JSON.stringify(r.msgs[1]).slice(0, 120));
 
+  r = await rawSession([init, { jsonrpc: "2.0", id: 6, method: "tools/call", params: { name: "get_note", arguments: {} } }]);
+  check("a get_note call with no id is an invalid-params error",
+    r.msgs[1].error && r.msgs[1].error.code === -32602, JSON.stringify(r.msgs[1]).slice(0, 120));
+
+  r = await rawSession([init, { jsonrpc: "2.0", id: 6, method: "tools/call", params: { name: "get_note", arguments: { id: "  " } } }]);
+  check("a blank get_note id is an invalid-params error",
+    r.msgs[1].error && r.msgs[1].error.code === -32602, JSON.stringify(r.msgs[1]).slice(0, 120));
+
+  r = await rawSession([init, { jsonrpc: "2.0", id: 6, method: "tools/call", params: { name: "search_notes", arguments: { query: "power", type: "note" } } }]);
+  check("a search_notes type outside the enum is an invalid-params error",
+    r.msgs[1].error && r.msgs[1].error.code === -32602 && /concept, moc/.test(r.msgs[1].error.message),
+    JSON.stringify(r.msgs[1]).slice(0, 120));
+
+  r = await rawSession([init, { jsonrpc: "2.0", id: 6, method: "resources/read", params: { uri: 5 } }]);
+  check("a resource uri that is not a string is an invalid-params error",
+    r.msgs[1].error && r.msgs[1].error.code === -32602 && /Unsupported uri/.test(r.msgs[1].error.message),
+    JSON.stringify(r.msgs[1]).slice(0, 120));
+
   r = await rawSession([init, { jsonrpc: "2.0", id: 6, method: "resources/read", params: { uri: "dpc-zettelkasten://note/%E0%A4" } }]);
   check("a resource uri with a malformed escape is an unknown id",
     r.msgs[1].error && r.msgs[1].error.code === -32602 && /No note with id/.test(r.msgs[1].error.message),
@@ -246,6 +264,12 @@ async function clientTests() {
   check("search_notes says how many matches a limit hid",
     c.json.returned === 1 && c.json.matched > 1 && /raise "limit"/.test(c.json.hint || ""), JSON.stringify(c.json.hint));
 
+  // "power" matches more notes than the default limit, so a limit read as NaN
+  // shows up as nothing returned rather than as a shorter list.
+  c = await call("search_notes", { query: "power", limit: "many" });
+  check("a search_notes limit that is not a number falls back to the default",
+    c.json.returned === 10 && c.json.matched > 10, `${c.json.returned} of ${c.json.matched}`);
+
   c = await call("get_note", { id: "demesne-limit" });
   check("get_note returns Markdown", c.json && typeof c.json.markdown === "string" && c.json.markdown.length > 200);
   check("get_note returns citations with pinned permalinks",
@@ -265,6 +289,11 @@ async function clientTests() {
   // not check for an own property finds them. That fails as a protocol error,
   // which `call` rejects on; catching it keeps the failure a named check.
   const attempt = (name, args) => call(name, args).catch((e) => ({ r: {}, body: e.message }));
+
+  c = await attempt("get_note", {});
+  check("get_note says an id is required rather than guessing at one",
+    /id must be a non-empty string/.test(c.body), c.body.slice(0, 120));
+
   for (const id of ["constructor", "__proto__"]) {
     c = await attempt("get_note", { id });
     check(`get_note treats ${id} as an unknown id`,
@@ -315,6 +344,12 @@ async function clientTests() {
 
   c = await call("get_citations", { id: "does-not-exist" });
   check("get_citations flags an unknown id as an error", c.r.isError === true, JSON.stringify(c.r.isError));
+  check("get_citations points at search_notes when no id is close",
+    /Use search_notes to find one/.test(c.body), c.body.slice(0, 120));
+
+  c = await call("get_citations", { id: "power" });
+  check("get_citations suggests ids that contain an unknown one",
+    c.r.isError === true && c.body.includes("faction-power") && c.body.includes("player-power"), c.body.slice(0, 120));
 
   c = await call("get_schema", {});
   check("get_schema returns SDL", c.body.includes("type Query") && c.body.includes("enum NoteType"));
