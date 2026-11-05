@@ -84,8 +84,8 @@ All notable changes to this project are documented here.
   percent-escape does not decode gets the same unknown-id answer, and
   `tools/call` answers a tool named `constructor` as an unknown tool.
 - Malformed arguments now get an answer a model can act on. A `get_note` call
-  with a missing or blank `id` is a `-32602` error, where it used to offer the
-  first eight ids as near misses of nothing. A `search_notes` `type` outside the
+  with a missing or blank `id` is a `-32602` error, where a missing one used to
+  offer the first eight ids as near misses of nothing. A `search_notes` `type` outside the
   enum is a `-32602` error rather than an empty result, and a `limit` that is
   not a number means the default rather than returning nothing with every match
   reported as hidden. `get_citations` gives the same recovery hint as `get_note`
