@@ -37,6 +37,8 @@ const CITATION_NOTE =
   "rather than presenting the claim as your own knowledge — the permalinks are " +
   "what make the answer checkable.";
 
+const NOTE_TYPES = ["concept", "moc"];
+
 function build(engine, source) {
   const notes = engine.notes;
   const meta = engine.meta;
@@ -45,6 +47,16 @@ function build(engine, source) {
   // `notes` is a plain object parsed from JSON, so indexing it with a caller's
   // id also finds what it inherits: "constructor" would come back as a note.
   const lookup = (id) => (Object.hasOwn(notes, id) ? notes[id] : undefined);
+
+  // An error that says what to try next, for a tool that was given a wrong id.
+  const unknownId = (id) => {
+    const near = ids.filter((i) => i.includes(String(id).toLowerCase())).slice(0, 8);
+    return text(
+      `No note with id "${id}".` +
+      (near.length ? ` Did you mean: ${near.join(", ")}?` : " Use search_notes to find one."),
+      true
+    );
+  };
 
   const brief = (n) => ({
     id: n.id,
@@ -92,13 +104,14 @@ function build(engine, source) {
         type: "object",
         properties: {
           query: { type: "string", description: "Words to look for in titles, summaries, tags, and bodies." },
-          type: { type: "string", enum: ["concept", "moc"], description: "Restrict to concept notes or Maps of Content." },
+          type: { type: "string", enum: NOTE_TYPES, description: "Restrict to concept notes or Maps of Content." },
           limit: { type: "integer", description: "Maximum results (default 10).", minimum: 1, maximum: 50 },
         },
         required: ["query"],
       },
       handler: (a) => {
         if (typeof a.query !== "string" || !a.query.trim()) throw invalid("query must be a non-empty string");
+        if (a.type && !NOTE_TYPES.includes(a.type)) throw invalid(`type must be one of: ${NOTE_TYPES.join(", ")}`);
         const q = a.query.toLowerCase();
         const all = q.split(/[^a-z0-9-]+/).filter(Boolean);
         // Keep the stopwords only if that is all the caller gave us.
@@ -132,7 +145,9 @@ function build(engine, source) {
           .filter((r) => r.score > 0)
           .sort((x, y) => y.score - x.score || x.n.title.localeCompare(y.n.title));
 
-        const limit = Math.min(Math.max(a.limit || 10, 1), 50);
+        // Number() first: a limit that is not one would otherwise reach slice()
+        // as NaN, which shows nothing and reports every match as hidden.
+        const limit = Math.min(Math.max(Number(a.limit) || 10, 1), 50);
         const shown = hits.slice(0, limit);
         return text({
           query: a.query,
@@ -160,16 +175,9 @@ function build(engine, source) {
         required: ["id"],
       },
       handler: (a) => {
+        if (typeof a.id !== "string" || !a.id.trim()) throw invalid("id must be a non-empty string");
         const n = lookup(a.id);
-        if (!n) {
-          const near = ids.filter((i) => i.includes(String(a.id || "").toLowerCase())).slice(0, 8);
-          return text(
-            `No note with id "${a.id}".` +
-            (near.length ? ` Did you mean: ${near.join(", ")}?` : " Use search_notes to find one."),
-            true
-          );
-        }
-        return text(full(n));
+        return n ? text(full(n)) : unknownId(a.id);
       },
     },
 
@@ -230,7 +238,7 @@ function build(engine, source) {
       handler: (a) => {
         let rows = [];
         const one = a.id ? lookup(a.id) : null;
-        if (a.id && !one) return text(`No note with id "${a.id}".`, true);
+        if (a.id && !one) return unknownId(a.id);
         const pool = one ? [one] : ids.map((i) => notes[i]);
         for (const n of pool) {
           for (const s of n.sources) {
