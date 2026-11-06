@@ -419,15 +419,25 @@ function startHttp(argv, env) {
   });
 }
 
-/** Run the server to completion and report what it said and how it exited. */
-function runServer(argv) {
+/**
+ * Run the server to completion and report what it said and how it exited. One
+ * that starts listening would never exit by itself, so it is stopped there: a
+ * startup that should have been refused fails its check rather than hanging.
+ */
+function runServer(argv, env) {
   return new Promise((resolve, reject) => {
-    const proc = spawn("node", [SERVER].concat(argv), { stdio: ["ignore", "pipe", "pipe"] });
+    const proc = spawn("node", [SERVER].concat(argv), {
+      stdio: ["ignore", "pipe", "pipe"],
+      env: Object.assign({}, process.env, env || {}),
+    });
     let out = "", err = "";
     proc.stdout.setEncoding("utf8");
     proc.stdout.on("data", (c) => (out += c));
     proc.stderr.setEncoding("utf8");
-    proc.stderr.on("data", (c) => (err += c));
+    proc.stderr.on("data", (c) => {
+      err += c;
+      if (/listening on http/.test(err)) proc.kill();
+    });
     proc.on("error", reject);
     proc.on("close", (code) => resolve({ code, out, err }));
   });
@@ -462,6 +472,22 @@ async function httpTests() {
   ran = await runServer(["--http", "--port", "not-a-port"]);
   check("a port that is not a number is refused",
     ran.code === 2 && /port number/.test(ran.err), `exit ${ran.code}: ${ran.err.slice(0, 60)}`);
+
+  const refusedPorts = [
+    ["a blank --port is refused rather than read as 0", ["--http", "--port", ""]],
+    ["an empty --port= is refused rather than read as 0", ["--http", "--port="]],
+    ["a hexadecimal --port is refused", ["--http", "--port", "0x50"]],
+    ["an exponent --port is refused", ["--http", "--port", "1e3"]],
+    ["a --port above 65535 is refused", ["--http", "--port", "65536"]],
+  ];
+  for (const [name, argv] of refusedPorts) {
+    ran = await runServer(argv);
+    check(name, ran.code === 2 && /port number/.test(ran.err), `exit ${ran.code}: ${ran.err.slice(0, 60)}`);
+  }
+
+  ran = await runServer([], { MCP_HTTP_PORT: " " });
+  check("a blank $MCP_HTTP_PORT is refused rather than read as 0",
+    ran.code === 2 && /\$MCP_HTTP_PORT .*port number/.test(ran.err), `exit ${ran.code}: ${ran.err.slice(0, 60)}`);
 
   const server = await startHttp();
   const init = { jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2024-11-05", capabilities: {}, clientInfo: { name: "t", version: "0" } } };

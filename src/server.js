@@ -87,9 +87,14 @@ function parseArgs(argv) {
   return opts;
 }
 
+/**
+ * Decimal digits only, checked before `Number`, which reads "" and " " as 0 and
+ * accepts `0x50` and `1e3`. A blank value is what an unset shell variable leaves
+ * in `--port "$PORT"`, and 0 would turn that into a random port.
+ */
 function port(value) {
-  const n = Number(value);
-  if (!Number.isInteger(n) || n < 0 || n > 65535) {
+  const n = /^\d+$/.test(value) ? Number(value) : NaN;
+  if (!Number.isInteger(n) || n > 65535) {
     throw new Error(`"${value}" is not a port number (0-65535; 0 asks the OS for a free one)`);
   }
   return n;
