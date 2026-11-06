@@ -91,6 +91,11 @@ All notable changes to this project are documented here.
   reported as hidden. `get_citations` gives the same recovery hint as `get_note`
   for an unknown id, and a non-string `uri` to `resources/read` is a `-32602`
   error rather than an internal failure.
+- A blank `--port` or `MCP_HTTP_PORT` is refused with exit status 2 rather than
+  read as `0`. `--port "$PORT"` with `PORT` unset used to start the server on a
+  random port, which a proxy expecting a fixed one could only discover later.
+  `0x50` and `1e3` are refused too. `--port 0` and `MCP_HTTP_PORT=0` still ask
+  the OS for a free port.
 
 ## [0.1.0] - 2026-08-08
 

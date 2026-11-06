@@ -73,7 +73,9 @@ to open.
 A flag beats the matching variable. `--help` prints the same summary. An
 `MCP_HTTP_PORT` that is not a port number is refused at startup with exit status
 2 rather than ignored — unless `--port` is given, in which case the variable is
-not read.
+not read. A port is decimal digits from `0` to `65535`, so `--port` refuses a
+blank value, `0x50`, and `1e3` the same way. A blank `MCP_HTTP_PORT` of spaces is
+refused too; an empty one counts as unset.
 
 The bind address is loopback unless you change it, and that is deliberate: this
 transport has **no authentication of its own**, so putting it on a public
