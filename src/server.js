@@ -64,7 +64,9 @@ See CONFIG.md.
 /**
  * The HTTP transport is opt-in, and binds loopback unless told otherwise: it
  * carries no authentication of its own yet, so exposing it takes a deliberate
- * `--host`, never a side effect of naming a port.
+ * `--host`, never a side effect of naming a port. An argument that would have
+ * no effect is refused for the same reason an unknown one is: the server that
+ * starts anyway is not the one that was asked for.
  */
 function parseArgs(argv) {
   const opts = {};
@@ -78,10 +80,15 @@ function parseArgs(argv) {
       if (v === undefined) throw new Error(`${name} needs a value`);
       return v;
     };
-    if (name === "--http") opts.http = true;
+    // `--http=false` would otherwise turn HTTP on.
+    const flag = () => {
+      if (inline !== null) throw new Error(`${name} takes no value`);
+      return true;
+    };
+    if (name === "--http") opts.http = flag();
     else if (name === "--port") opts.port = port(value());
-    else if (name === "--host") opts.host = value();
-    else if (name === "--help" || name === "-h") opts.help = true;
+    else if (name === "--host") opts.host = address(value());
+    else if (name === "--help" || name === "-h") opts.help = flag();
     else throw new Error(`Unknown argument: ${arg}. Run with --help.`);
   }
   return opts;
@@ -98,6 +105,15 @@ function port(value) {
     throw new Error(`"${value}" is not a port number (0-65535; 0 asks the OS for a free one)`);
   }
   return n;
+}
+
+/**
+ * A blank value is what an unset shell variable leaves in `--host "$HOST"`.
+ * Falling through to the default would quietly bind somewhere else.
+ */
+function address(value) {
+  if (!value.trim()) throw new Error("--host needs an address");
+  return value;
 }
 
 function resolveSources() {
@@ -175,6 +191,17 @@ async function main(argv) {
   if (args.help) {
     process.stderr.write(USAGE);
     return;
+  }
+
+  // These configure the HTTP transport without selecting it. On stdio they
+  // would do nothing, and the ready line would read as if the server had bound.
+  const overHttp = args.http || process.env.MCP_HTTP_PORT;
+  const stray = ["port", "host"].find((o) => args[o] !== undefined);
+  if (!overHttp && stray) {
+    process.stderr.write(
+      `${NAME}: --${stray} only applies to the HTTP transport; add --http, or drop it to speak stdio.\n`
+    );
+    process.exit(2);
   }
 
   let loaded;
@@ -274,7 +301,7 @@ async function main(argv) {
     `${NAME} ${VERSION} ready — ${meta.noteCount} notes, ${meta.citationCount} citations ` +
     `across ${meta.repos.length} repositories (${origin}${pin})`;
 
-  if (args.http || process.env.MCP_HTTP_PORT) {
+  if (overHttp) {
     await serveHttp(server, args, { meta, source, banner });
     usage.startup("http");
     return;
