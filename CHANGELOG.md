@@ -96,6 +96,10 @@ All notable changes to this project are documented here.
   random port, which a proxy expecting a fixed one could only discover later.
   `0x50` and `1e3` are refused too. `--port 0` and `MCP_HTTP_PORT=0` still ask
   the OS for a free port.
+- Startup arguments that would have no effect are refused with exit status 2.
+  `--port` or `--host` without `--http` or `MCP_HTTP_PORT` used to print the
+  ready line and speak stdio with nothing bound, a blank `--host` fell back to
+  the default address, and `--http=false` turned HTTP on.
 
 ## [0.1.0] - 2026-08-08
 

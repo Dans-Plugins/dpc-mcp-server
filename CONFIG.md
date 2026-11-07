@@ -77,6 +77,12 @@ not read. A port is decimal digits from `0` to `65535`, so `--port` refuses a
 blank value, `0x50`, and `1e3` the same way. A blank `MCP_HTTP_PORT` of spaces is
 refused too; an empty one counts as unset.
 
+`--port` and `--host` configure the HTTP transport without selecting it, so
+with neither `--http` nor a non-empty `MCP_HTTP_PORT` they are refused with exit
+status 2, rather than leaving a server on stdio with nothing listening. A blank
+`--host` is refused the same way rather than read as the default, and so is a
+value on `--http` or `--help`, which take none.
+
 The bind address is loopback unless you change it, and that is deliberate: this
 transport has **no authentication of its own**, so putting it on a public
 interface is a decision to be made explicitly rather than a side effect of

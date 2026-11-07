@@ -489,6 +489,20 @@ async function httpTests() {
   check("a blank $MCP_HTTP_PORT is refused rather than read as 0",
     ran.code === 2 && /\$MCP_HTTP_PORT .*port number/.test(ran.err), `exit ${ran.code}: ${ran.err.slice(0, 60)}`);
 
+  // Each of these used to start: the first two on stdio, with nothing bound.
+  const refusedFlags = [
+    ["a --port with no HTTP transport is refused rather than ignored", ["--port", "8080"], /--port only applies/],
+    ["a --host with no HTTP transport is refused rather than ignored", ["--host", "0.0.0.0"], /--host only applies/],
+    ["a blank --host is refused rather than read as the default", ["--http", "--host", ""], /--host needs an address/],
+    ["an empty --host= is refused rather than read as the default", ["--http", "--host="], /--host needs an address/],
+    ["--http=false is refused rather than turning HTTP on", ["--http=false"], /--http takes no value/],
+    ["--help= with a value is refused", ["--help=yes"], /--help takes no value/],
+  ];
+  for (const [name, argv, said] of refusedFlags) {
+    ran = await runServer(argv);
+    check(name, ran.code === 2 && said.test(ran.err), `exit ${ran.code}: ${ran.err.slice(0, 60)}`);
+  }
+
   const server = await startHttp();
   const init = { jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2024-11-05", capabilities: {}, clientInfo: { name: "t", version: "0" } } };
 
@@ -604,6 +618,12 @@ async function httpTests() {
   } finally {
     configured.stop();
   }
+
+  // The variable selected the transport, so the flag has something to apply to
+  // and the variable, which would be refused, is not read.
+  const flagged = await startHttp(["--port", "0"], { MCP_HTTP_PORT: "not-a-port" });
+  check("--port is accepted when $MCP_HTTP_PORT selected HTTP", /listening on http/.test(flagged.stderr()));
+  flagged.stop();
 
   // How a container stops this server. Node as PID 1 ignores a signal it has
   // installed no handler for, so an unhandled SIGTERM costs `docker stop` its
