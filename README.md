@@ -162,7 +162,7 @@ Override the source at runtime if you would rather point at a checkout:
 |---|---|
 | `DPC_ZK_PATH` | Path to a `dpc-zettelkasten` checkout; uses its `site/dataset.json` and `lib/zk-graphql.js` |
 | `DPC_ZK_DATASET` | Path to a specific `dataset.json` |
-| `DPC_ZK_ENGINE` | Path to a specific `zk-graphql.js` |
+| `DPC_ZK_ENGINE` | Path to a specific `zk-graphql.js`, used with `DPC_ZK_DATASET`; ignored without it |
 
 See [CONFIG.md](CONFIG.md).
 
