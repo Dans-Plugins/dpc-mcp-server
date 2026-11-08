@@ -12,7 +12,7 @@ Checked in this order; the first that exists wins.
 | Variable | Meaning |
 |---|---|
 | `DPC_ZK_DATASET` | Path to a `dataset.json`. Pair with `DPC_ZK_ENGINE` if the matching engine is elsewhere. |
-| `DPC_ZK_ENGINE` | Path to a `zk-graphql.js`. Defaults to the vendored copy. |
+| `DPC_ZK_ENGINE` | Path to a `zk-graphql.js` for the `DPC_ZK_DATASET` source. Defaults to the vendored copy. It is not a source of its own and has no place in this order: without `DPC_ZK_DATASET` it is ignored, silently. |
 | `DPC_ZK_PATH` | Path to a `dpc-zettelkasten` checkout. Uses its `site/dataset.json` and `lib/zk-graphql.js`. |
 | *(none)* | `vendor/dataset.json` and `vendor/zk-graphql.js` — the committed snapshot. |
 
