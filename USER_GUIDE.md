@@ -96,8 +96,9 @@ in the zettelkasten after each edit, because `site/dataset.json` is generated.
 ## Troubleshooting
 
 **The client shows no tools.** Check the command path is absolute. Run
-`node src/server.js` by hand: it should print a ready line to stderr and then
-wait.
+`node src/server.js` by hand: it should print a ready line to stderr, then a
+line saying whether usage reporting is on (see
+[CONFIG.md](CONFIG.md#usage-reporting)), and then wait.
 
 **"No zettelkasten data found".** `vendor/` is missing or incomplete. Run
 `npm run sync`, or set `DPC_ZK_PATH`.
