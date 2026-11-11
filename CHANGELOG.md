@@ -38,7 +38,10 @@ All notable changes to this project are documented here.
   container it built and checks that it returns in under five seconds with exit
   code 0, so the container path is covered and not only the process one.
 - Tests for the new transport, including a live session driven through the
-  SDK's `StreamableHTTPClientTransport`: 86 assertions in total, up from 55.
+  SDK's `StreamableHTTPClientTransport`. With those and the usage-reporting
+  tests the suite runs 165 checks, up from 55 — 166 on Node 22.13 or later,
+  where it also checks that `vendor/trace-client.js` is exactly what its
+  TypeScript source derives to.
 
 ### Changed
 - The vendored collection is `Dans-Plugins/dpc-zettelkasten@188c93fefb`, up
