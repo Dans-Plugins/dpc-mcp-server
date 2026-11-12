@@ -38,15 +38,20 @@ All notable changes to this project are documented here.
   container it built and checks that it returns in under five seconds with exit
   code 0, so the container path is covered and not only the process one.
 - Tests for the new transport, including a live session driven through the
-  SDK's `StreamableHTTPClientTransport`. With those and the usage-reporting
-  tests the suite runs 165 checks, up from 55 — 166 on Node 22.13 or later,
+  SDK's `StreamableHTTPClientTransport`. With those, the usage-reporting tests
+  and the engine checks noted under Changed, the suite runs 170 checks, up from
+  55 — 171 on Node 22.13 or later,
   where it also checks that `vendor/trace-client.js` is exactly what its
   TypeScript source derives to.
 
 ### Changed
-- The vendored collection is `Dans-Plugins/dpc-zettelkasten@188c93fefb`, up
+- The vendored collection is `Dans-Plugins/dpc-zettelkasten@e6cd27828e`, up
   from `7c9b5f4eaa`: 55 notes and 144 citations across 14 repositories, up from
-  45, 90 and 9. The engine, `zk-graphql.js`, is unchanged.
+  45, 90 and 9. The engine, `zk-graphql.js`, now looks up notes, fields and
+  arguments by own property only, so a `graphql` query naming `constructor` or
+  `__proto__` gets an unknown-field or unknown-argument error, or a `null` note,
+  rather than something every plain object inherits. Five client-layer checks
+  hold it there.
 - The vendored trace client is trace-client-js 0.4.0 (tag `0.4.0`, commit
   1b4d0fb), refreshed with `npm run sync:trace-client -- --ref <sha>`. Every
   event now carries a random installation ID as the tag `install`, so trace can
