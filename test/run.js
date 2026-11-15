@@ -301,7 +301,19 @@ async function clientTests() {
     c = await attempt("get_citations", { id });
     check(`get_citations treats ${id} as an unknown id`,
       c.r.isError === true && /No note with id/.test(c.body), c.body.slice(0, 120));
+    c = await attempt("graphql", { query: `{ note(id: "${id}") { id } }` });
+    check(`graphql finds no note with id ${id}`,
+      c.json && c.json.data.note === null, c.body.slice(0, 120));
+    c = await attempt("graphql", { query: `{ ${id} }` });
+    check(`graphql treats ${id} as an unknown field`,
+      c.r.isError === true && c.body.includes(`Cannot query field "${id}"`), c.body.slice(0, 120));
   }
+
+  // Not __proto__: the engine's parser collects arguments into a plain object,
+  // where assigning __proto__ is dropped before the schema ever sees it.
+  c = await call("graphql", { query: "{ note(id: \"x\", constructor: \"y\") { id } }" });
+  check("graphql treats constructor as an unknown argument",
+    c.r.isError === true && c.body.includes("Unknown argument \"constructor\""), c.body.slice(0, 120));
 
   c = await call("list_maps", {});
   check("list_maps returns the hierarchy", c.json && c.json.maps.length === 7, c.json && String(c.json.maps.length));

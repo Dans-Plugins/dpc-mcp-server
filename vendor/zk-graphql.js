@@ -145,8 +145,12 @@
 
     /* ------------------------------------------------------------ schema */
 
+    // Names reach these maps from queries, so "constructor" must not find what
+    // every plain object inherits.
+    const own = (map, name) => Object.prototype.hasOwnProperty.call(map, name);
+
     const noteList = () => ids.map((id) => NOTES[id]);
-    const resolveNote = (id) => NOTES[id] || null;
+    const resolveNote = (id) => (own(NOTES, id) ? NOTES[id] : null);
 
     function tagIndex() {
       const t = {};
@@ -289,13 +293,13 @@
       const fields = TYPES[typeName];
       const out = {};
       for (const sel of sels) {
-        const def = fields[sel.name];
-        if (!def) {
+        if (!own(fields, sel.name)) {
           throw err(`Cannot query field "${sel.name}" on type "${typeName}". ` +
                     `Available: ${Object.keys(fields).join(", ")}`, sel.at);
         }
+        const def = fields[sel.name];
         for (const key of Object.keys(sel.args)) {
-          if (!def.args || !(key in def.args)) {
+          if (!def.args || !own(def.args, key)) {
             throw err(`Unknown argument "${key}" on field "${sel.name}". ` +
                       `Accepts: ${def.args ? Object.keys(def.args).join(", ") : "none"}`, sel.at);
           }
