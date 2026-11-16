@@ -67,7 +67,7 @@ close, rather than an empty result. A missing or blank `id` is a JSON-RPC
   "title": "Demesne Limit",
   "moc": "moc-faction-domain-model",
   "links": ["claimed-chunk", "faction-power", "vassalage", "player-power"],
-  "backlinks": ["faction-power", "player-power", "…"],
+  "backlinks": ["claimed-chunk", "faction-power", "…"],
   "sources": [
     { "repo": "Dans-Plugins/Medieval-Factions",
       "path": "src/main/kotlin/…/MfFactionClaimFillCommand.kt",
@@ -109,6 +109,9 @@ has no recorded commit, and it reads
   "maps": [
     { "id": "moc-dans-plugins-community", "title": "Dan's Plugins Community",
       "summary": "…", "concepts": [] },
+    { "id": "moc-medieval-factions", "title": "Medieval Factions Map",
+      "summary": "…",
+      "concepts": [{ "id": "medieval-factions", "title": "Medieval Factions" }] },
     { "id": "moc-faction-domain-model", "title": "Faction Domain Model",
       "summary": "…",
       "concepts": [{ "id": "approval-request", "title": "Approval Request" }] }
