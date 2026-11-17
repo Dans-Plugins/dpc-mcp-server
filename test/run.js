@@ -544,6 +544,10 @@ async function httpTests() {
 
     r = await postJson(server.url, init, { "content-type": "text/plain" });
     check("a non-JSON content type is refused with 415", r.res.status === 415, String(r.res.status));
+    check("a refusal carries a JSON-RPC error body, not an HTML page",
+      /^application\/json/.test(r.res.headers.get("content-type") || "") &&
+      r.json && r.json.jsonrpc === "2.0" && r.json.error.code === -32600 && /application\/json/.test(r.json.error.message),
+      r.text.slice(0, 80));
 
     r = await postJson(server.url, init, { accept: "text/plain" });
     check("an Accept this server cannot satisfy is refused with 406", r.res.status === 406, String(r.res.status));
@@ -565,10 +569,37 @@ async function httpTests() {
 
     r = await postJson(server.url, init, { origin: "http://localhost:5173" });
     check("a loopback Origin is allowed", r.res.status === 200, String(r.res.status));
+    check("an allowed Origin is not granted CORS",
+      r.res.headers.get("access-control-allow-origin") === null, String(r.res.headers.get("access-control-allow-origin")));
+
+    // Sandboxed frames and file: pages send the literal Origin "null", which is
+    // not a URL and so cannot be a loopback one.
+    r = await postJson(server.url, init, { origin: "null" });
+    check("an Origin that is not a URL is refused with 403", r.res.status === 403, String(r.res.status));
+
+    r = await postJson(server.url + "?session=1", init);
+    check("a query string on /mcp is ignored rather than a 404", r.res.status === 200, String(r.res.status));
+
+    // With no MCP-Protocol-Version header, the version echoed is the one the
+    // initialize inside the batch asked for, not the server's default.
+    const newer = { jsonrpc: "2.0", id: 9, method: "initialize", params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "t", version: "0" } } };
+    r = await postJson(server.url, [newer, { jsonrpc: "2.0", id: 10, method: "ping" }]);
+    check("a batched initialize sets the protocol version header",
+      r.res.status === 200 && r.res.headers.get("mcp-protocol-version") === "2025-06-18",
+      `${r.res.status} ${r.res.headers.get("mcp-protocol-version")}`);
 
     let res = await fetch(server.url, { method: "GET" });
     check("GET /mcp is 405, not a hanging stream",
       res.status === 405 && res.headers.get("allow") === "POST", String(res.status));
+    await res.text();
+
+    res = await fetch(server.url, {
+      method: "OPTIONS",
+      headers: { origin: "http://localhost:5173", "access-control-request-method": "POST" },
+    });
+    check("a CORS preflight is 405 rather than a grant",
+      res.status === 405 && res.headers.get("access-control-allow-origin") === null,
+      `${res.status} ${res.headers.get("access-control-allow-origin")}`);
     await res.text();
 
     res = await fetch(server.base + "/healthz");
@@ -577,6 +608,15 @@ async function httpTests() {
       res.status === 200 && health.status === "ok", String(res.status));
     check("the healthcheck names the commit of the collection it serves",
       /^[0-9a-f]{40}$/.test(health.collection || ""), String(health.collection));
+
+    res = await fetch(server.base + "/healthz", { method: "HEAD" });
+    check("the healthcheck answers HEAD", res.status === 200, String(res.status));
+    await res.text();
+
+    res = await fetch(server.base + "/healthz", { method: "POST" });
+    check("a POST to the healthcheck is 405, pointing at GET",
+      res.status === 405 && res.headers.get("allow") === "GET, HEAD", `${res.status} ${res.headers.get("allow")}`);
+    await res.text();
 
     res = await fetch(server.base + "/nope");
     check("an unknown path is 404 with a pointer to /mcp",
@@ -629,6 +669,14 @@ async function httpTests() {
     check("an origin outside $MCP_HTTP_ORIGINS is still refused", r.res.status === 403, String(r.res.status));
   } finally {
     configured.stop();
+  }
+
+  const open = await startHttp(["--http", "--port", "0"], { MCP_HTTP_ORIGINS: "*" });
+  try {
+    const r = await postJson(open.url, init, { origin: "https://anywhere.example" });
+    check("$MCP_HTTP_ORIGINS=* allows any origin", r.res.status === 200, String(r.res.status));
+  } finally {
+    open.stop();
   }
 
   // The variable selected the transport, so the flag has something to apply to

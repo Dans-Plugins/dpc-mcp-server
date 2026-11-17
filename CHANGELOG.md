@@ -39,8 +39,8 @@ All notable changes to this project are documented here.
   code 0, so the container path is covered and not only the process one.
 - Tests for the new transport, including a live session driven through the
   SDK's `StreamableHTTPClientTransport`. With those, the usage-reporting tests
-  and the engine checks noted under Changed, the suite runs 170 checks, up from
-  55 — 171 on Node 22.13 or later,
+  and the engine checks noted under Changed, the suite runs 179 checks, up from
+  55 — 180 on Node 22.13 or later,
   where it also checks that `vendor/trace-client.js` is exactly what its
   TypeScript source derives to.
 
