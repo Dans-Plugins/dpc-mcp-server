@@ -173,10 +173,14 @@ reason the startup notice gives:
 
 | Switch | Reason printed |
 |---|---|
-| `TRACE_USAGE_REPORTING=off` (or `false`, `0`, `no`) | `environment` |
-| `DO_NOT_TRACK=1` (or `true`, `yes`; see https://consoledonottrack.com) | `environment` |
-| `"enabled": false` in `src/usage-reporting.json` | `src/usage-reporting.json` |
+| `TRACE_USAGE_REPORTING=off` (any value but empty, `true`, `on`, `yes` or `1`) | `environment` |
+| `DO_NOT_TRACK=1` (any value but empty, `0`, `false`, `off` or `no`; see https://consoledonottrack.com) | `environment` |
+| `"enabled": false` in `src/usage-reporting.json` (any value but `true` or `"true"`/`"on"`/`"yes"`/`"1"`, so `"false"`, `0` or `null` too), or the file missing or not valid JSON | `src/usage-reporting.json` |
 | no `key` in `src/usage-reporting.json` | `no key` |
+
+Each switch fails closed: a value it does not recognise is read as off, never
+as on. A config file that does not parse turns reporting off rather than
+falling back to defaults; one that leaves `"enabled"` out entirely is on.
 
 In an MCP client that means an `env` entry beside the command:
 
@@ -195,7 +199,7 @@ In an MCP client that means an `env` entry beside the command:
 `USAGE_REPORTING_ENDPOINT` sends the reports somewhere else instead, such as a
 self-hosted trace or a stub while testing. The key in `src/usage-reporting.json`
 identifies this program to trace; it is not a secret. Details:
-https://github.com/Stephenson-Software/trace#usage-reporting
+https://danielstephenson.dev/usage-reporting
 
 The client is vendored like the collection is: `vendor/trace-client.ts` is the
 file from [trace-client-js](https://github.com/Stephenson-Software/trace-client-js)
