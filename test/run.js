@@ -798,6 +798,27 @@ async function usageTests() {
   check('"enabled": false in the config file turns it off',
     usage.settings(Object.assign({}, cfg, { enabled: false }), {}).reason === "src/usage-reporting.json");
   check("no key turns it off", usage.settings(Object.assign({}, cfg, { key: " " }), {}).reason === "no key");
+  for (const v of [false, "false", "FALSE", "off", "no", "0", 0, null, "disabled", "ture", "", 1, {}]) {
+    check(`"enabled": ${JSON.stringify(v)} in the config file turns it off`,
+      usage.settings(Object.assign({}, cfg, { enabled: v }), {}).reason === "src/usage-reporting.json");
+  }
+  for (const v of [true, "true", " On ", "yes", "1"]) {
+    check(`"enabled": ${JSON.stringify(v)} in the config file leaves it on`,
+      usage.settings(Object.assign({}, cfg, { enabled: v }), {}).enabled);
+  }
+  const noSwitch = Object.assign({}, cfg);
+  delete noSwitch.enabled;
+  check('a config file without "enabled" defaults to on', usage.settings(noSwitch, {}).enabled);
+  for (const broken of [null, undefined, "x", [], 42]) {
+    check(`an unreadable config file (${JSON.stringify(broken)}) turns it off`,
+      usage.settings(broken, {}).reason === "src/usage-reporting.json");
+  }
+  check("an unreadable config file still lets the environment win",
+    usage.settings(null, { TRACE_USAGE_REPORTING: "off" }).reason === "environment");
+  for (const v of ["disabled", "nope", "flase"]) {
+    check(`TRACE_USAGE_REPORTING=${v} turns it off`, usage.settings(cfg, { TRACE_USAGE_REPORTING: v }).reason === "environment");
+    check(`DO_NOT_TRACK=${v} turns it off`, usage.settings(cfg, { DO_NOT_TRACK: v }).reason === "environment");
+  }
   check("a disabled reporter says why", usage.create({ config: cfg, env: { TRACE_USAGE_REPORTING: "off" } }).notice ===
     "Usage reporting is off (environment).");
   const { TraceClient } = require(path.join(ROOT, "vendor", "trace-client.js"));

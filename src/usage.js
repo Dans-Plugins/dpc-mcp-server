@@ -18,8 +18,12 @@
  * On by default, and off with any one of these, checked in this order (the
  * first that applies is the reason given in the startup notice):
  *
- *   1. TRACE_USAGE_REPORTING=off (or false/0/no), or DO_NOT_TRACK=1 (or true/yes)
- *   2. "enabled": false in src/usage-reporting.json
+ *   1. TRACE_USAGE_REPORTING set to anything but blank/true/on/yes/1, or
+ *      DO_NOT_TRACK set to anything but blank/0/false/off/no
+ *   2. src/usage-reporting.json missing or unreadable, or its "enabled" set to
+ *      anything but true or "true"/"on"/"yes"/"1" ("enabled": false, "false",
+ *      0, null, "off" ... all turn it off; only a file without "enabled" at
+ *      all defaults to on)
  *   3. no key in src/usage-reporting.json
  *
  * The notice goes to stderr, never stdout: on stdio, stdout is the protocol,
@@ -45,15 +49,27 @@ function environmentOptOut(env) {
 }
 
 /**
+ * Whether the config file's own switch leaves reporting on. Left out, it
+ * defaults to on; given, only true or an on-string keeps it on (the vendored
+ * client's own `allowsReporting`), so `"enabled": "false"`, `0`, `null` or a
+ * typo is an opt-out rather than being read as on.
+ */
+function configAllows(cfg) {
+  if (!Object.prototype.hasOwnProperty.call(cfg, "enabled")) return true;
+  return TraceClient.allowsReporting(cfg.enabled);
+}
+
+/**
  * Decide whether to report, and why not if not. `config` is the parsed
  * usage-reporting.json; `env` is process.env or a test's stand-in.
  */
 function settings(config, env) {
-  const cfg = config || {};
+  const readable = config !== null && typeof config === "object" && !Array.isArray(config);
+  const cfg = readable ? config : {};
   const key = typeof cfg.key === "string" ? cfg.key.trim() : "";
   let reason = null;
   if (environmentOptOut(env)) reason = "environment";
-  else if (cfg.enabled === false) reason = "src/usage-reporting.json";
+  else if (!readable || !configAllows(cfg)) reason = "src/usage-reporting.json";
   else if (!key) reason = "no key";
   return {
     enabled: reason === null,
@@ -97,6 +113,11 @@ function notice(s, name) {
   );
 }
 
+/**
+ * The parsed config file, or null when it is missing or does not parse. Null
+ * turns reporting off (settings() gives the file as the reason): a file an
+ * operator broke while editing it is never read as the defaults.
+ */
 function readConfig() {
   try { return require(CONFIG_FILE); } catch (e) { return null; }
 }
@@ -145,4 +166,4 @@ function create(opts) {
   };
 }
 
-module.exports = { create, settings, environmentOptOut, installIdFile, DETAILS };
+module.exports = { create, settings, configAllows, environmentOptOut, installIdFile, DETAILS };

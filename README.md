@@ -217,9 +217,13 @@ file is never read or created.
 To turn it off, any one of these:
 
 - `TRACE_USAGE_REPORTING=off` in the server's environment (the `env` block of
-  your MCP client's config)
-- `DO_NOT_TRACK=1` in the server's environment
-- `"enabled": false` in `src/usage-reporting.json`
+  your MCP client's config); any value but empty, `true`, `on`, `yes` or `1`
+  turns it off
+- `DO_NOT_TRACK=1` in the server's environment; any value but empty, `0`,
+  `false`, `off` or `no` turns it off
+- `"enabled": false` in `src/usage-reporting.json`; any value but `true` (or
+  `"true"`, `"on"`, `"yes"`, `"1"`) turns it off, and so does a file that does
+  not parse
 
 Details: https://github.com/Stephenson-Software/trace#usage-reporting
 

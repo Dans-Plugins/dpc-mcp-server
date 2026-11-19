@@ -1,5 +1,5 @@
 /**
- * trace-client 0.4.0 -- https://github.com/Stephenson-Software/trace-client-js
+ * trace-client 0.5.0 -- https://github.com/Stephenson-Software/trace-client-js
  *
  * One call to report that a program was used. Copy this file into a project
  * as is; there is nothing else to add. Zero dependencies and no Node-only
@@ -13,7 +13,7 @@
  * MIT licensed. Keep this header when vendoring so the file can be found again.
  */
 
-export const TRACE_CLIENT_VERSION = "0.4.0";
+export const TRACE_CLIENT_VERSION = "0.5.0";
 
 // Everything added since 0.1.0 hangs off TraceClient (static members) rather
 // than being a new top-level export, so the file's exported values stay
@@ -26,8 +26,8 @@ export type DisabledReason = "environment" | "config" | "no key";
 /** An environment to read the opt-outs from: `process.env`, or a stand-in. */
 export type Environment = Readonly<Record<string, string | undefined>>;
 
-const OFF_VALUES = ["off", "false", "0", "no"];
-const DO_NOT_TRACK_VALUES = ["1", "true", "yes"];
+const ON_VALUES = ["true", "on", "yes", "1"];
+const NEGATIVE_VALUES = ["false", "off", "no", "0"];
 
 // Declared here rather than taken from @types/node so the file still
 // type-checks against ES2022 + DOM alone; at runtime `process` may simply not
@@ -50,22 +50,38 @@ interface NodePath {
 /** An installation ID read from a file: what Java accepts on a `server-id:` line. */
 const INSTALL_ID_LINE = /^[A-Za-z0-9_.-]{1,255}$/;
 
+/** The longest delay `setTimeout` holds; past it, the timer fires almost at once. */
+const MAX_TIMER_MS = 2147483647;
+
 export interface TraceClientOptions {
   /**
    * The program's own version, required. Sent as the tag `version` on every
-   * event; an event's own `version` tag wins. Trimmed; blank, missing, or
-   * longer than {@link TraceClient.MAX_VERSION_LENGTH} characters throws.
+   * event; an event's own `version` tag wins. Trimmed; blank, missing, not a
+   * string, or longer than {@link TraceClient.MAX_VERSION_LENGTH} characters
+   * throws.
    */
   version: string;
-  /** The program's write key. Blank or missing yields a client that does nothing. */
+  /** The program's write key. Blank, missing or not a string yields a client that does nothing. */
   key?: string;
-  /** The opt-out switch. `false` yields a client that does nothing. Default `true`. */
-  enabled?: boolean;
-  /** Per-request timeout in milliseconds. Default {@link TraceClient.TIMEOUT_MS}. */
+  /**
+   * The program's own switch. Fails closed: only `true`, or a string reading
+   * `true`, `on`, `yes` or `1` (any case), leaves reporting on; anything else
+   * given -- `false`, `"false"`, `"off"`, a typo, a number, `null`,
+   * `undefined` -- yields a client that does nothing. Default (option left
+   * out) `true`. See {@link TraceClient.allowsReporting}.
+   */
+  enabled?: boolean | string | null;
+  /**
+   * Per-request timeout in milliseconds. Default {@link TraceClient.TIMEOUT_MS}.
+   * Held to 2147483647 (about 24.8 days), the longest a timer can wait.
+   */
   timeoutMs?: number;
-  /** The `fetch` to use. Default: the global one. */
+  /**
+   * The `fetch` to use. Default: the global one. One that ignores its abort
+   * signal is given up on at `timeoutMs` all the same.
+   */
   fetch?: typeof fetch;
-  /** Receives one line per dropped report. Default: silence. */
+  /** Receives one line per dropped report. Default: silence. A throw or rejection from it is ignored. */
   debug?: (message: string) => void;
   /**
    * Where to read `TRACE_USAGE_REPORTING` and `DO_NOT_TRACK` from. Default:
@@ -78,8 +94,8 @@ export interface TraceClientOptions {
    * The installation's ID, sent as the tag `install` on every event so the
    * trace server can count installations rather than events. It should be
    * random -- e.g. a `crypto.randomUUID()` the program stores itself -- and
-   * never derived from a person, account or address. Trimmed; missing or
-   * blank means none; longer than {@link TraceClient.MAX_VERSION_LENGTH}
+   * never derived from a person, account or address. Trimmed; missing,
+   * blank or not a string means none; longer than {@link TraceClient.MAX_VERSION_LENGTH}
    * characters throws. Wins over `installIdFile`.
    */
   installId?: string | null;
@@ -93,7 +109,7 @@ export interface TraceClientOptions {
 }
 
 export interface ReportOptions {
-  /** An optional number to attach to the event. NaN and infinities are omitted. */
+  /** An optional number to attach to the event. NaN, infinities and non-numbers are omitted. */
   value?: number;
   /** Optional string tags. */
   tags?: Record<string, string>;
@@ -121,11 +137,13 @@ export interface ReportOptions {
  * nothing and costs nothing. So does the environment: the constructor checks
  * `TRACE_USAGE_REPORTING=off` and `DO_NOT_TRACK=1` before it looks at
  * `enabled`, so a user can switch off every trace-reporting program at once.
+ * Every switch fails closed: a value that does not clearly mean "on" turns
+ * reporting off, and nothing in this client turns a switch back on.
  * {@link disabledReason} says which of those applied (`"environment"`,
  * `"config"` or `"no key"`; `null` when on) so the program can say so in its
  * notice. Programs that run on other people's machines should expose that
  * switch in their settings and say so once, pointing at
- * https://github.com/Stephenson-Software/trace#usage-reporting.
+ * https://danielstephenson.dev/usage-reporting.
  *
  * Every event carries the program's own version as the tag `version` -- the
  * required `version` option -- so a `page-view` or `command` event can be
@@ -142,7 +160,7 @@ export interface ReportOptions {
  * const trace = new TraceClient("https://trace.example.org", "my-site", {
  *   version: "1.4.0",
  *   key: process.env.USAGE_REPORTING_KEY,
- *   enabled: process.env.USAGE_REPORTING_ENABLED !== "false",
+ *   enabled: TraceClient.allowsReporting(process.env.USAGE_REPORTING_ENABLED ?? true),
  * });
  * if (!trace.enabled) console.log(`Usage reporting is off (${trace.disabledReason}).`);
  * trace.report("startup"); // tagged version=1.4.0
@@ -153,48 +171,71 @@ export interface ReportOptions {
 export class TraceClient {
   static readonly IN_FLIGHT_CAPACITY = 256;
   static readonly TIMEOUT_MS = 5000;
-  /** The longest program version accepted, after trimming. */
+  /** The longest program version, or `installId`, accepted after trimming. */
   static readonly MAX_VERSION_LENGTH = 255;
-  /** At most this many tags; the `install` tag is not added to an event that already has this many. */
+  /**
+   * The `install` tag is not added to an event that already has this many
+   * tags, counting the `version` tag the client adds; its own tags are not capped.
+   */
   static readonly MAX_TAGS = 32;
   /** The tag every event carries the installation's ID as. */
   static readonly INSTALL_TAG = "install";
 
   /**
    * Environment variables that turn reporting off for every program using a
-   * trace client, checked before the program's own setting:
-   * `TRACE_USAGE_REPORTING=off` (also `false`, `0`, `no`; case and
-   * surrounding space do not matter) or `DO_NOT_TRACK=1` (also `true`, `yes`;
-   * see https://consoledonottrack.com). Any other value, including an empty
-   * one, leaves the program's own setting in charge.
+   * trace client, checked before the program's own setting. Both fail closed:
+   * `TRACE_USAGE_REPORTING` set to anything but blank, `true`, `on`, `yes` or
+   * `1` turns reporting off (so `off`, `false`, `0`, `no`, `disabled`, a
+   * typo, ...), and so does `DO_NOT_TRACK` set to anything but blank, `0`,
+   * `false`, `off` or `no` (so `1`, `true`, `yes`, ...; see
+   * https://consoledonottrack.com). Case and surrounding space do not
+   * matter. Unset or blank leaves the program's own setting in charge.
    */
   static readonly ENV_TRACE_USAGE_REPORTING = "TRACE_USAGE_REPORTING";
   static readonly ENV_DO_NOT_TRACK = "DO_NOT_TRACK";
 
   /** {@link disabledReason} when `TRACE_USAGE_REPORTING` or `DO_NOT_TRACK` opted out. */
   static readonly REASON_ENVIRONMENT = "environment";
-  /** {@link disabledReason} when the program passed `enabled: false`. */
+  /** {@link disabledReason} when the program's `enabled` was not clearly on. */
   static readonly REASON_CONFIG = "config";
-  /** {@link disabledReason} when the key was missing or blank. */
+  /** {@link disabledReason} when the key was missing, blank or not a string. */
   static readonly REASON_NO_KEY = "no key";
 
   /**
-   * Whether the environment asks for usage reporting to be off, via
-   * `TRACE_USAGE_REPORTING=off` or `DO_NOT_TRACK=1`. Reads `env` when given,
-   * otherwise `process.env` if the runtime has one; never throws, and a
-   * runtime without an environment opts nothing out.
+   * Whether the environment asks for usage reporting to be off: see
+   * {@link ENV_TRACE_USAGE_REPORTING}. Reads `env` when given, otherwise
+   * `process.env` if the runtime has one; a runtime with no environment at
+   * all opts nothing out. Never throws, and fails closed: an environment
+   * that cannot be read, or a value in it that is not a string, opts out --
+   * it may hold `DO_NOT_TRACK=1`.
    */
   static environmentOptsOut(env?: Environment): boolean {
-    let trace: unknown;
-    let doNotTrack: unknown;
     try {
       const source = env ?? processEnvironment();
-      trace = source[TraceClient.ENV_TRACE_USAGE_REPORTING];
-      doNotTrack = source[TraceClient.ENV_DO_NOT_TRACK];
+      const trace = setting(source[TraceClient.ENV_TRACE_USAGE_REPORTING]);
+      if (trace !== "" && !ON_VALUES.includes(trace)) return true;
+      const doNotTrack = setting(source[TraceClient.ENV_DO_NOT_TRACK]);
+      return doNotTrack !== "" && !NEGATIVE_VALUES.includes(doNotTrack);
     } catch {
-      return false; // an environment that cannot be read opts nothing out
+      return true; // an environment that cannot be read may say DO_NOT_TRACK=1
     }
-    return matches(trace, OFF_VALUES) || matches(doNotTrack, DO_NOT_TRACK_VALUES);
+  }
+
+  /**
+   * Whether a program's own reporting setting, as read from its
+   * configuration, allows reporting -- for the `enabled` option. Fails
+   * closed: only `true`, or a string reading `true`, `on`, `yes` or `1` (any
+   * case, surrounding space ignored), allows it. Anything else turns
+   * reporting off: `false`, `"false"`, `"off"`, `"no"`, a typo, a number,
+   * `null`, `undefined` (a missing setting), a quoted `'"false"'`.
+   *
+   * Pass the raw value. A comparison such as `value !== "false"` reads a
+   * typo, `"off"` or `"FALSE"` as on. To keep reporting on when the setting
+   * is absent, say so: `allowsReporting(process.env.X ?? true)`.
+   */
+  static allowsReporting(setting: unknown): boolean {
+    if (typeof setting === "boolean") return setting;
+    return typeof setting === "string" && ON_VALUES.includes(setting.trim().toLowerCase());
   }
 
   private readonly endpoint: string;
@@ -231,18 +272,19 @@ export class TraceClient {
     }
     this.endpoint = baseUrl.trim().replace(/\/+$/, "") + "/api/metrics";
     this.application = application.trim();
-    this.key = (options.key ?? "").trim();
+    // A non-string key from untyped code counts as missing rather than throwing.
+    this.key = typeof options.key === "string" ? options.key.trim() : "";
     const timeoutMs = options.timeoutMs;
     this.timeoutMs =
       typeof timeoutMs === "number" && timeoutMs > 0 && Number.isFinite(timeoutMs)
-        ? timeoutMs
+        ? Math.min(timeoutMs, MAX_TIMER_MS)
         : TraceClient.TIMEOUT_MS;
     this.fetchImpl = options.fetch;
     this.debug = options.debug;
     // Decided once, here: the environment, then the program's switch, then the key.
     if (TraceClient.environmentOptsOut(options.env)) {
       this.reason = TraceClient.REASON_ENVIRONMENT;
-    } else if (options.enabled === false) {
+    } else if ("enabled" in options && !TraceClient.allowsReporting(options.enabled)) {
       this.reason = TraceClient.REASON_CONFIG;
     } else if (this.key === "") {
       this.reason = TraceClient.REASON_NO_KEY;
@@ -321,7 +363,7 @@ export class TraceClient {
 
   /**
    * Why this client reports nothing: `"environment"` (`TRACE_USAGE_REPORTING`
-   * / `DO_NOT_TRACK`), `"config"` (`enabled: false`) or `"no key"`; `null`
+   * / `DO_NOT_TRACK`), `"config"` (`enabled` not clearly on) or `"no key"`; `null`
    * when it reports. Fixed at construction; {@link close} does not change it.
    */
   get disabledReason(): DisabledReason | null {
@@ -353,7 +395,9 @@ export class TraceClient {
     }
     let body: string;
     try {
-      body = serialize(this.application, name, options.value, withInstall(withVersion(options.tags, this.version), this.install));
+      // A null (or other non-object) options from untyped code means "no options".
+      const { value, tags } = options !== null && typeof options === "object" ? options : ({} as ReportOptions);
+      body = serialize(this.application, name, value, withInstall(withVersion(tags, this.version), this.install));
     } catch (failure) {
       this.log(`could not serialize ${name}: ${describe(failure)}`);
       return Promise.resolve();
@@ -364,7 +408,8 @@ export class TraceClient {
         this.log(`could not deliver ${body}: ${describe(failure)}`);
       });
     } catch (failure) {
-      // send() is async, so this only happens if fetch itself is missing.
+      // Unreachable while send() is async -- a missing fetch rejects and is
+      // logged above -- but kept so report() still cannot throw if that changes.
       this.log(`could not deliver ${body}: ${describe(failure)}`);
       return Promise.resolve();
     }
@@ -405,23 +450,37 @@ export class TraceClient {
   private async send(body: string): Promise<void> {
     const doFetch = this.fetchImpl ?? fetch;
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), this.timeoutMs);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    // The abort goes first, so a fetch that honours it reports its own failure.
+    // One that ignores it can no longer hold the slot: the attempt ends here,
+    // and whatever that fetch does later is discarded, its body unread.
+    const givenUp = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => {
+        controller.abort();
+        reject(new Error(`no answer within ${this.timeoutMs}ms`));
+      }, this.timeoutMs);
+    });
     try {
-      const response = await doFetch(this.endpoint, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: "Bearer " + this.key,
-          "User-Agent": `trace-client-js/${TRACE_CLIENT_VERSION} (${this.application})`,
-        },
-        body,
-        signal: controller.signal,
-      });
+      const response = await Promise.race([
+        doFetch(this.endpoint, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: "Bearer " + this.key,
+            "User-Agent": `trace-client-js/${TRACE_CLIENT_VERSION} (${this.application})`,
+          },
+          body,
+          signal: controller.signal,
+        }),
+        givenUp,
+      ]);
       if (!response.ok) {
         this.log(`trace server answered ${response.status} for ${body}`);
       }
-      // Let the connection be reused; never fail on an unreadable body.
-      await response.arrayBuffer().catch(() => undefined);
+      // Let the connection be reused; never fail on an unreadable body. Called
+      // from an async function, so a read that throws is caught here as well.
+      const drained = (async () => response.arrayBuffer())();
+      await Promise.race([drained, givenUp]).catch(() => undefined);
     } finally {
       clearTimeout(timer);
     }
@@ -430,7 +489,9 @@ export class TraceClient {
   private log(message: string): void {
     if (!this.debug) return;
     try {
-      this.debug("[trace] " + message);
+      const result: unknown = this.debug("[trace] " + message);
+      // An async sink fails by rejecting, which the catch below never sees.
+      Promise.resolve(result).catch(() => undefined);
     } catch {
       // a debug sink must never be the reason a program stops either
     }
@@ -455,17 +516,18 @@ export function pagePath(urlOrPath: string): string {
   if (cut >= 0) path = path.slice(0, cut);
   if (!path.startsWith("/")) path = "/" + path;
   path = path.replace(/\/{2,}/g, "/");
-  if (path.length > 1 && path.endsWith("/")) path = path.slice(0, -1);
+  // Cut first, so a cut that lands on a slash cannot leave one at the end.
   if (path.length > 200) path = path.slice(0, 200);
+  if (path.length > 1 && path.endsWith("/")) path = path.slice(0, -1);
   return path;
 }
 
 const BOT_PATTERN =
-  /bot\b|bot[\/_-]|crawler|crawling|spider|slurp|curl\/|wget\/|python-requests|python-urllib|go-http-client|java\/|okhttp|libwww|httpclient|headlesschrome|lighthouse|pagespeed|uptimerobot|pingdom|statuscake|site24x7|monitor|facebookexternalhit|discordbot|twitterbot|telegrambot|whatsapp|slackbot|linkedinbot|embedly|quora link preview|bitlybot|skypeuripreview|nuzzel|vkshare|w3c_validator|redditbot|applebot|yandex|baiduspider|duckduckbot|bingpreview|semrush|ahrefs|mj12bot|dotbot|petalbot|bytespider|gptbot|chatgpt-user|claudebot|anthropic-ai|ccbot|perplexitybot|scrapy|axios\/|node-fetch|undici|postmanruntime|insomnia|httpie|phantomjs|selenium|puppeteer|playwright/i;
+  /(?<!cu)bot\b|(?<!cu)bot[\/_-]|crawler|crawling|spider|slurp|curl\/|wget\/|python-requests|python-urllib|go-http-client|java\/|okhttp|libwww|httpclient|headlesschrome|lighthouse|pagespeed|uptimerobot|pingdom|statuscake|site24x7|monitor|facebookexternalhit|discordbot|twitterbot|telegrambot|whatsapp|slackbot|linkedinbot|embedly|quora link preview|bitlybot|skypeuripreview|nuzzel|vkshare|w3c_validator|redditbot|applebot|yandex|baiduspider|duckduckbot|bingpreview|semrush|ahrefs|mj12bot|dotbot|petalbot|bytespider|gptbot|chatgpt-user|claudebot|anthropic-ai|ccbot|perplexitybot|scrapy|axios\/|node-fetch|undici|postmanruntime|insomnia|httpie|phantomjs|selenium|puppeteer|playwright/i;
 
 /**
  * Whether a User-Agent header belongs to a crawler, a monitor, or a script
- * rather than a person's browser. A missing or empty header counts as a bot:
+ * rather than a person's browser. A missing, empty or blank header counts as a bot:
  * every real browser sends one.
  */
 export function isBot(userAgent: string | null | undefined): boolean {
@@ -477,24 +539,28 @@ export function isBot(userAgent: string | null | undefined): boolean {
 
 /**
  * The two opt-out variables from `process.env`, or an empty environment where
- * there is no `process` (or reading it throws, as a permission-gated runtime
- * may). Each is read by its literal name, which is what lets bundlers such as
+ * there is no `process` or it has no `env`. Throws when reading it throws (a
+ * permission-gated runtime), which environmentOptsOut takes as an opt-out.
+ * Each is read by its literal name, which is what lets bundlers such as
  * Next.js inline it for the Edge runtime.
  */
 function processEnvironment(): Environment {
-  try {
-    if (typeof process === "undefined" || !process || !process.env) return {};
-    return {
-      TRACE_USAGE_REPORTING: process.env.TRACE_USAGE_REPORTING,
-      DO_NOT_TRACK: process.env.DO_NOT_TRACK,
-    };
-  } catch {
-    return {};
-  }
+  if (typeof process === "undefined" || !process || !process.env) return {};
+  return {
+    TRACE_USAGE_REPORTING: process.env.TRACE_USAGE_REPORTING,
+    DO_NOT_TRACK: process.env.DO_NOT_TRACK,
+  };
 }
 
-function matches(value: unknown, accepted: readonly string[]): boolean {
-  return typeof value === "string" && accepted.includes(value.trim().toLowerCase());
+/**
+ * An environment variable's value, trimmed and lower-cased; `""` when unset.
+ * Throws for a value that is not a string, which environmentOptsOut takes as
+ * an opt-out.
+ */
+function setting(value: unknown): string {
+  if (value === undefined || value === null) return "";
+  if (typeof value !== "string") throw new TypeError("not a string");
+  return value.trim().toLowerCase();
 }
 
 /**
@@ -580,7 +646,10 @@ function serialize(
 }
 
 function bounded(work: Promise<void>, timeoutMs: number): Promise<void> {
-  const ms = typeof timeoutMs === "number" && timeoutMs >= 0 && Number.isFinite(timeoutMs) ? timeoutMs : 0;
+  const ms =
+    typeof timeoutMs === "number" && timeoutMs >= 0 && Number.isFinite(timeoutMs)
+      ? Math.min(timeoutMs, MAX_TIMER_MS)
+      : 0;
   return new Promise<void>((resolve) => {
     const timer = setTimeout(resolve, ms);
     work.then(
@@ -596,11 +665,16 @@ function bounded(work: Promise<void>, timeoutMs: number): Promise<void> {
   });
 }
 
+/** A failure as text. Called while handling a drop, so it must never throw itself. */
 function describe(failure: unknown): string {
-  if (failure instanceof Error) {
-    const cause = (failure as Error & { cause?: unknown }).cause;
-    const causeText = cause instanceof Error ? ` (${cause.message})` : "";
-    return `${failure.name}: ${failure.message}${causeText}`;
+  try {
+    if (failure instanceof Error) {
+      const cause = (failure as Error & { cause?: unknown }).cause;
+      const causeText = cause instanceof Error ? ` (${cause.message})` : "";
+      return `${failure.name}: ${failure.message}${causeText}`;
+    }
+    return String(failure);
+  } catch {
+    return "unprintable failure";
   }
-  return String(failure);
 }

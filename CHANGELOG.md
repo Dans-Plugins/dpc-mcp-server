@@ -80,6 +80,16 @@ All notable changes to this project are documented here.
   titles, summaries, and bodies, which is what the handler has always done.
 
 ### Fixed
+- Usage reporting stays off once it is turned off. `"enabled"` in
+  `src/usage-reporting.json` now keeps reporting on only for `true` or
+  `"true"`/`"on"`/`"yes"`/`"1"`; `"false"`, `0`, `null` or a typo turn it off,
+  where only the JSON literal `false` did before. A config file that is
+  missing or does not parse is now an opt-out in its own right (reason
+  `src/usage-reporting.json`), rather than being read as an empty config that
+  happened to be off only for want of a key. The vendored trace-client-js moves from 0.4.0 to 0.5.0, which reads
+  `TRACE_USAGE_REPORTING` set to anything but empty or an on-value, and
+  `DO_NOT_TRACK` set to anything but empty or `0`/`false`/`off`/`no`, as an
+  opt-out.
 - `search_notes` no longer drops `que` from a query as a stopword. The list is
   English filler; `que` was a stray, and in any query with other words beside
   it, it stopped `que` from matching `query` or `unique`. An unreachable
