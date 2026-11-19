@@ -225,7 +225,7 @@ To turn it off, any one of these:
   `"true"`, `"on"`, `"yes"`, `"1"`) turns it off, and so does a file that does
   not parse
 
-Details: https://github.com/Stephenson-Software/trace#usage-reporting
+Details: https://danielstephenson.dev/usage-reporting
 
 ## Support
 

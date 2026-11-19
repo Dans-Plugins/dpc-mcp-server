@@ -199,7 +199,7 @@ In an MCP client that means an `env` entry beside the command:
 `USAGE_REPORTING_ENDPOINT` sends the reports somewhere else instead, such as a
 self-hosted trace or a stub while testing. The key in `src/usage-reporting.json`
 identifies this program to trace; it is not a secret. Details:
-https://github.com/Stephenson-Software/trace#usage-reporting
+https://danielstephenson.dev/usage-reporting
 
 The client is vendored like the collection is: `vendor/trace-client.ts` is the
 file from [trace-client-js](https://github.com/Stephenson-Software/trace-client-js)

@@ -34,7 +34,7 @@ const os = require("os");
 const path = require("path");
 const { TraceClient } = require("../vendor/trace-client.js");
 
-const DETAILS = "https://github.com/Stephenson-Software/trace#usage-reporting";
+const DETAILS = "https://danielstephenson.dev/usage-reporting";
 const CONFIG_FILE = path.join(__dirname, "usage-reporting.json");
 /** How long a stopping server waits for reports still in flight. */
 const CLOSE_MS = 1000;
