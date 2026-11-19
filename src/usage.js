@@ -23,7 +23,8 @@
  *   2. src/usage-reporting.json missing or unreadable, or its "enabled" set to
  *      anything but true or "true"/"on"/"yes"/"1" ("enabled": false, "false",
  *      0, null, "off" ... all turn it off; only a file without "enabled" at
- *      all defaults to on)
+ *      all defaults to on), or an opt-out under another spelling ("enable":
+ *      false, "disabled": true, "usage_reporting": false; hasNearMissOptOut)
  *   3. no key in src/usage-reporting.json
  *
  * The notice goes to stderr, never stdout: on stdio, stdout is the protocol,
@@ -55,8 +56,48 @@ function environmentOptOut(env) {
  * typo is an opt-out rather than being read as on.
  */
 function configAllows(cfg) {
+  if (hasNearMissOptOut(cfg)) return false;
   if (!Object.prototype.hasOwnProperty.call(cfg, "enabled")) return true;
   return TraceClient.allowsReporting(cfg.enabled);
+}
+
+/** A key in lower case with everything but letters and digits dropped. */
+function normalise(key) {
+  return String(key).toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+/**
+ * Whether the config file holds an attempt to turn reporting off that is not
+ * written exactly as `"enabled"`. Such a key used to be ignored, so with
+ * `"enabled"` left out (or still `true`) reporting stayed on. Whoever wrote
+ * any of these did not ask for reporting, so each counts as off:
+ *
+ *   - a key that spells "enabled" another way (`"enable"`, `"Enabled"`, ...)
+ *     whose value is not clearly on;
+ *   - one that spells "disabled" (`"disabled"`, `"disable"`, ...) whose value
+ *     is on;
+ *   - a key that spells "usage reporting" (`"usage_reporting"`,
+ *     `"usageReporting"`, ...) holding a value that is not clearly on, or a
+ *     block in which any of the above holds (its own `"enabled"` included).
+ */
+function hasNearMissOptOut(cfg, inBlock) {
+  for (const key of Object.keys(cfg)) {
+    if (!inBlock && key === "enabled") continue; // the switch itself
+    const name = normalise(key);
+    const value = cfg[key];
+    if (name.includes("disabl")) {
+      if (TraceClient.allowsReporting(value)) return true;
+    } else if (name.includes("enabl")) {
+      if (!TraceClient.allowsReporting(value)) return true;
+    } else if (!inBlock && name.includes("usagereport")) {
+      if (value !== null && typeof value === "object" && !Array.isArray(value)) {
+        if (hasNearMissOptOut(value, true)) return true;
+      } else if (!TraceClient.allowsReporting(value)) {
+        return true;
+      }
+    }
+  }
+  return false;
 }
 
 /**
@@ -166,4 +207,4 @@ function create(opts) {
   };
 }
 
-module.exports = { create, settings, configAllows, environmentOptOut, installIdFile, DETAILS };
+module.exports = { create, settings, configAllows, hasNearMissOptOut, environmentOptOut, installIdFile, DETAILS };

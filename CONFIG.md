@@ -181,6 +181,9 @@ reason the startup notice gives:
 Each switch fails closed: a value it does not recognise is read as off, never
 as on. A config file that does not parse turns reporting off rather than
 falling back to defaults; one that leaves `"enabled"` out entirely is on.
+Other spellings count as off too: `"enable": false`, `"Enabled": false`,
+`"disabled": true` (even next to `"enabled": true`), `"usage_reporting": false`,
+or a `"usage-reporting"`/`"usageReporting"` block saying any of these.
 
 In an MCP client that means an `env` entry beside the command:
 

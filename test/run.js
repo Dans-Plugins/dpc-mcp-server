@@ -809,6 +809,33 @@ async function usageTests() {
   const noSwitch = Object.assign({}, cfg);
   delete noSwitch.enabled;
   check('a config file without "enabled" defaults to on', usage.settings(noSwitch, {}).enabled);
+  // An opt-out written under another spelling used to be ignored, leaving
+  // "enabled" (or its absence) in charge, so reporting stayed on.
+  const withoutSwitch = (extra) => Object.assign({}, noSwitch, extra);
+  const withSwitch = (extra) => Object.assign({}, cfg, extra);
+  for (const [label, config] of [
+    ['"enable": false', withoutSwitch({ enable: false })],
+    ['"Enabled": "off"', withoutSwitch({ Enabled: "off" })],
+    ['"disabled": true', withoutSwitch({ disabled: true })],
+    ['"disable": "yes" next to "enabled": true', withSwitch({ disable: "yes" })],
+    ['"usage_reporting": false', withSwitch({ usage_reporting: false })],
+    ['"usageReporting": "no"', withoutSwitch({ usageReporting: "no" })],
+    ['"usage-reporting": {"enabled": false}', withoutSwitch({ "usage-reporting": { enabled: false } })],
+    ['"UsageReporting": {"disabled": true}', withSwitch({ UsageReporting: { disabled: true } })],
+  ]) {
+    check(`a near-miss opt-out (${label}) turns it off`,
+      usage.settings(config, {}).reason === "src/usage-reporting.json");
+  }
+  for (const [label, config] of [
+    ['"enable": true next to "enabled": true', withSwitch({ enable: true })],
+    ['"disabled": false', withSwitch({ disabled: false })],
+    ['"usage_reporting": "on"', withSwitch({ usage_reporting: "on" })],
+    ['"usage-reporting": {"enabled": true}', withoutSwitch({ "usage-reporting": { enabled: true } })],
+    ['the shipped "_comment"', withSwitch({ _comment: "Set enabled to false here to turn reporting off." })],
+  ]) {
+    check(`a near-miss name that says on (${label}) leaves it on`, usage.settings(config, {}).enabled);
+  }
+  check("the shipped src/usage-reporting.json is on", usage.settings(require("../src/usage-reporting.json"), {}).enabled);
   for (const broken of [null, undefined, "x", [], 42]) {
     check(`an unreadable config file (${JSON.stringify(broken)}) turns it off`,
       usage.settings(broken, {}).reason === "src/usage-reporting.json");
