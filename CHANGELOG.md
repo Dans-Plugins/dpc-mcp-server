@@ -80,6 +80,10 @@ All notable changes to this project are documented here.
   titles, summaries, and bodies, which is what the handler has always done.
 
 ### Fixed
+- An opt-out written under another spelling now counts as off. `"enable":
+  false`, `"Enabled": false`, `"disabled": true` (even next to `"enabled":
+  true`), `"usage_reporting": false` or a `"usageReporting"` block saying off in
+  `src/usage-reporting.json` used to be ignored, leaving reporting on.
 - Usage reporting stays off once it is turned off. `"enabled"` in
   `src/usage-reporting.json` now keeps reporting on only for `true` or
   `"true"`/`"on"`/`"yes"`/`"1"`; `"false"`, `0`, `null` or a typo turn it off,
