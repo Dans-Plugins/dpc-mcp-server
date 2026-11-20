@@ -103,7 +103,8 @@
       }
 
       function args() {
-        const out = {};
+        // Argument names come from the query, so "__proto__" must stay an own key.
+        const out = Object.create(null);
         if (peek().k !== "(") return out;
         next();
         while (peek().k !== ")") {
@@ -153,7 +154,7 @@
     const resolveNote = (id) => (own(NOTES, id) ? NOTES[id] : null);
 
     function tagIndex() {
-      const t = {};
+      const t = Object.create(null);
       for (const id of ids) for (const tag of NOTES[id].tags || []) (t[tag] = t[tag] || []).push(id);
       return t;
     }
@@ -288,6 +289,11 @@
       return { data, notes: [...new Set(touched)] };
     }
 
+    // Aliases come from the query; a plain assignment of "__proto__" would set
+    // the prototype instead of adding the field.
+    const put = (obj, key, value) =>
+      Object.defineProperty(obj, key, { value, enumerable: true, writable: true, configurable: true });
+
     function resolveSelections(sels, typeName, parent) {
       if (typeName === "Note" && parent && parent.id && touched) touched.push(parent.id);
       const fields = TYPES[typeName];
@@ -315,14 +321,14 @@
         const leaf = SCALARS.has(def.type);
         if (leaf) {
           if (sel.sel) throw err(`Field "${sel.name}" is a scalar and has no subfields`, sel.at);
-          out[sel.alias] = value;
+          put(out, sel.alias, value);
           continue;
         }
         if (!sel.sel) throw err(`Field "${sel.name}" of type "${def.type}" needs a selection set`, sel.at);
-        if (value === null || value === undefined) { out[sel.alias] = null; continue; }
-        out[sel.alias] = def.list
+        if (value === null || value === undefined) { put(out, sel.alias, null); continue; }
+        put(out, sel.alias, def.list
           ? value.map((v) => resolveSelections(sel.sel, def.type, v))
-          : resolveSelections(sel.sel, def.type, value);
+          : resolveSelections(sel.sel, def.type, value));
       }
       return out;
     }

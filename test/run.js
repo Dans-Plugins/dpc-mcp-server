@@ -309,11 +309,22 @@ async function clientTests() {
       c.r.isError === true && c.body.includes(`Cannot query field "${id}"`), c.body.slice(0, 120));
   }
 
-  // Not __proto__: the engine's parser collects arguments into a plain object,
-  // where assigning __proto__ is dropped before the schema ever sees it.
-  c = await call("graphql", { query: "{ note(id: \"x\", constructor: \"y\") { id } }" });
-  check("graphql treats constructor as an unknown argument",
-    c.r.isError === true && c.body.includes("Unknown argument \"constructor\""), c.body.slice(0, 120));
+  for (const id of ["constructor", "__proto__"]) {
+    c = await call("graphql", { query: `{ note(id: "x", ${id}: "y") { id } }` });
+    check(`graphql treats ${id} as an unknown argument`,
+      c.r.isError === true && c.body.includes(`Unknown argument "${id}"`), c.body.slice(0, 120));
+  }
+
+  // An alias names a key in the answer, and assigning "__proto__" to a plain
+  // object sets its prototype instead, so the field would vanish from the JSON.
+  const ownKey = (o, k) => o !== null && typeof o === "object" && Object.prototype.hasOwnProperty.call(o, k);
+  c = await call("graphql", { query: "{ __proto__: stats { noteCount } }" });
+  check("graphql answers an object field aliased __proto__",
+    c.json && ownKey(c.json.data, "__proto__") && ownKey(c.json.data.__proto__, "noteCount"), c.body.slice(0, 120));
+  c = await call("graphql", { query: "{ stats { __proto__: noteCount } }" });
+  check("graphql answers a scalar field aliased __proto__",
+    c.json && ownKey(c.json.data.stats, "__proto__") && typeof c.json.data.stats.__proto__ === "number",
+    c.body.slice(0, 120));
 
   c = await call("list_maps", {});
   check("list_maps returns the hierarchy", c.json && c.json.maps.length === 7, c.json && String(c.json.maps.length));

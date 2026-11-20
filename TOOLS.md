@@ -103,8 +103,8 @@ has no recorded commit, and it reads
   "root": "moc-dans-plugins-community",
   "collection": {
     "repo": "Dans-Plugins/dpc-zettelkasten",
-    "ref": "e6cd27828ede97cee8484a2ff62b45046508cc39",
-    "url": "https://github.com/Dans-Plugins/dpc-zettelkasten/tree/e6cd27828ede97cee8484a2ff62b45046508cc39"
+    "ref": "a1bb29d4c17f4bbe32b01693d4f4952751aad7aa",
+    "url": "https://github.com/Dans-Plugins/dpc-zettelkasten/tree/a1bb29d4c17f4bbe32b01693d4f4952751aad7aa"
   },
   "maps": [
     { "id": "moc-dans-plugins-community", "title": "Dan's Plugins Community",
