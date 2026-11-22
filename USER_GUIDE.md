@@ -32,6 +32,10 @@ A well-behaved client will call `search_notes` with something like
 `get_note` on each. The answer should come back with permalinks like
 `https://github.com/Dans-Plugins/Medieval-Factions/blob/3a51c55…/…#L109-L110`.
 
+This is what the citation step looks like on the wire, from a real session:
+
+![get_citations for faction-power returning two citations, each with the claim it supports, the repository, file, line range and a GitHub permalink pinned to a commit SHA](docs/screenshots/session-citations.png)
+
 **If it does not cite anything, be suspicious.** Every concept note in the
 collection carries at least one source; an uncited answer is the model
 answering from its own priors rather than from the collection.
