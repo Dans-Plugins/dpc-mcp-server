@@ -1,0 +1,77 @@
+{
+  "out": ".",
+  "devices": {
+    "wide": {
+      "width": 1240,
+      "height": 1400,
+      "dpr": 1
+    }
+  },
+  "defaults": {
+    "device": "wide",
+    "url": "file://{manifest_dir}/build/session.html?only={section}",
+    "depends": [
+      "session"
+    ],
+    "format": "png",
+    "colors": 64
+  },
+  "shots": [
+    {
+      "name": "session",
+      "kind": "prep",
+      "argv": [
+        "node",
+        "session.js"
+      ],
+      "outputs": [
+        "build/session.html"
+      ],
+      "inputs": [
+        "session.js",
+        "../../src/",
+        "../../vendor/dataset.json"
+      ],
+      "depends": []
+    },
+    {
+      "name": "session-citations",
+      "kind": "still",
+      "crop": {
+        "of": "#hero",
+        "pad": 0
+      },
+      "alt": "A real MCP session over stdio: the server's startup line, initialize, tools/list showing six tools, then get_citations for faction-power returning two citations with commit-pinned GitHub permalinks",
+      "caption": "A session over stdio: the six tools, then the two citations behind the faction-power note, each pinned to a commit.",
+      "vars": {
+        "section": "hero"
+      }
+    },
+    {
+      "name": "search-notes",
+      "kind": "still",
+      "crop": {
+        "of": "#search",
+        "pad": 0
+      },
+      "alt": "search_notes called with the query 'faction power' and limit 3: 50 notes matched, and the Faction Power note comes back first with its summary, tags, counts and links",
+      "caption": "search_notes: 50 notes match \"faction power\", and the note about it comes back first.",
+      "vars": {
+        "section": "search"
+      }
+    },
+    {
+      "name": "graphql-degree",
+      "kind": "still",
+      "crop": {
+        "of": "#graphql",
+        "pad": 0
+      },
+      "alt": "The graphql tool answering a query for the five most connected notes, with each note's degree and its Map of Content",
+      "caption": "The graphql tool answers structural questions, here the five most connected notes.",
+      "vars": {
+        "section": "graphql"
+      }
+    }
+  ]
+}

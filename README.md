@@ -10,6 +10,11 @@ over the collection, and **the citation behind every claim**. Ask it how faction
 power works and the answer comes back with a GitHub permalink pinned to a commit
 SHA, so the claim can be checked rather than trusted.
 
+![A real MCP session over stdio: the server's startup line, initialize, tools/list showing six tools, then get_citations for faction-power returning two citations with commit-pinned GitHub permalinks](docs/screenshots/session-citations.png)
+
+*A real session against the vendored snapshot: the six tools, then the two
+citations behind the `faction-power` note, each pinned to a commit.*
+
 ## Install
 
 Requires Node 18 or later. **No runtime dependencies.**
@@ -127,6 +132,51 @@ query without a round trip — and a failed query gets the schema back in the
 error, which is usually enough to fix it on the next attempt. Read-only by
 construction: mutations, fragments, and variables are refused with an
 explanation rather than a parse error.
+
+## Screenshots
+
+Each image is a real session: the official MCP SDK client drives
+`node src/server.js` over stdio against the vendored snapshot, and the page is
+the server's own output. A long response is cut at a fixed number of lines, and
+the cut is marked.
+
+![search_notes called with the query 'faction power' and limit 3: 50 notes matched, and the Faction Power note comes back first with its summary, tags, counts and links](docs/screenshots/search-notes.png)
+
+*`search_notes`: 50 notes match "faction power", and the note about it comes back
+first.*
+
+![The graphql tool answering a query for the five most connected notes, with each note's degree and its Map of Content](docs/screenshots/graphql-degree.png)
+
+*The `graphql` tool answers structural questions, here the five most connected
+notes.*
+
+**Regenerating screenshots:** `npm install`, then
+`darkroom shoot docs/screenshots/media.json --force` with
+[darkroom](https://github.com/Preponderous-Software/darkroom); the session itself
+is recorded by `node docs/screenshots/session.js`.
+
+## How it fits together
+
+```mermaid
+flowchart LR
+    local["MCP client<br/>(Claude Code, Claude Desktop)"] -- "JSON-RPC over stdio" --> server["src/server.js"]
+    remote["HTTP client<br/>or container"] -- "POST /mcp" --> http["src/http.js"]
+    http --> protocol
+    server --> protocol["src/protocol.js<br/>initialize · tools/* · resources/*"]
+    protocol --> tools["src/tools.js<br/>six tools"]
+    protocol --> resources["note resources<br/>dpc-zettelkasten://note/&lt;id&gt;"]
+    tools --> engine["vendor/zk-graphql.js<br/>GraphQL engine"]
+    resources --> engine
+    engine --> data[("vendor/dataset.json<br/>or $DPC_ZK_PATH / $DPC_ZK_DATASET")]
+    sync["npm run sync<br/>tools/sync.js"] -- "fetch at a commit SHA" --> upstream[("dpc-zettelkasten<br/>on GitHub")]
+    sync -- "writes" --> data
+    server -. "tool names only" .-> trace["usage reporting<br/>src/usage.js"]
+```
+
+Both transports hand messages to the same protocol layer, so a session over
+HTTP is answered exactly as one over stdio. Nothing is fetched at request time:
+the collection is read once at startup, and only `npm run sync` touches the
+network for data.
 
 ## Where the data comes from
 
